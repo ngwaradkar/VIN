@@ -1,0 +1,35 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Streamlit
+.streamlit/
+
+# Agents and Customizations
+.agents/
+
+# IDEs
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# User data sheets and temp logs (confidential/local files)
+*.xlsx
+*.xls
+*.csv
+*.log
+steps_*.json
+*.txt
+!requirements.txt
+
+# Keep assets folder
+!assets/
+
+# Ignore large media files
+*.mp4
+*.zip
+*.tar.gz
