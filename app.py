@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import streamlit as st
 import base64
 import os
@@ -460,6 +461,137 @@ st.markdown('<div class="styled-divider"></div>', unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────
+# PRODUCTION LINE CAPACITIES (MANUAL ADJUSTMENT PER DAY)
+# ─────────────────────────────────────────────
+st.markdown(
+    """
+    <div class="section-header">
+        <div class="section-icon" style="background:rgba(156,163,175,0.15);">📅</div>
+        <div>
+            <p class="section-title">Production Line Capacities</p>
+            <p class="section-subtitle">Set planning capacities for each specific day on both tracks</p>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+# Dynamically calculate planning dates
+baseline_date = None
+yest_tcf1 = st.session_state.get("vin_plan_tcf1_yesterday")
+if yest_tcf1 is not None:
+    try:
+        import io
+        import openpyxl
+        import datetime
+        wb_temp = openpyxl.load_workbook(io.BytesIO(yest_tcf1.getvalue()), read_only=True, data_only=True)
+        if 'Plan Summary' in wb_temp.sheetnames:
+            ws_temp = wb_temp['Plan Summary']
+            val_h2 = ws_temp.cell(row=2, column=8).value # Yesterday's Day 1
+            if isinstance(val_h2, (datetime.datetime, datetime.date)):
+                baseline_date = val_h2
+    except Exception:
+        pass
+
+import datetime
+if baseline_date is None:
+    baseline_date = datetime.date.today()
+elif isinstance(baseline_date, datetime.datetime):
+    baseline_date = baseline_date.date()
+
+def get_next_planning_days(start_date, count=4):
+    days = []
+    curr = start_date
+    while len(days) < count:
+        curr += datetime.timedelta(days=1)
+        if curr.weekday() == 6: # Sunday
+            continue
+        days.append(curr)
+    return days
+
+planning_days = get_next_planning_days(baseline_date, 4)
+d1, d2, d3, d4 = planning_days
+
+d1_str = d1.strftime('%Y-%m-%d (%A)')
+d2_str = d2.strftime('%Y-%m-%d (%A)')
+d3_str = d3.strftime('%Y-%m-%d (%A)')
+d4_str = d4.strftime('%Y-%m-%d (%A)')
+
+cap_col1, cap_col2 = st.columns(2, gap="large")
+
+with cap_col1:
+    st.markdown("### TCF-1 (Punch / Altroz) Daily Targets")
+    
+    tcf1_caps = []
+    tcf1_ev = []
+    tcf1_cng = []
+    
+    for idx, (day_num, def_total, def_ev, def_cng) in enumerate([
+        ("1", 900, 160, 350),
+        ("2", 900, 160, 200),
+        ("3", 900, 160, 350),
+        ("4", 900, 160, 350)
+    ]):
+        st.markdown(f"**Day- {day_num}**")
+        sc1, sc2, sc3, sc4 = st.columns(4)
+        with sc1:
+            total_cap = st.number_input("Total Target", min_value=0, max_value=2000, value=def_total, step=50, key=f"tcf1_cap_d{day_num}")
+        with sc2:
+            ev_cap = st.number_input("Punch EV Limit", min_value=0, max_value=2000, value=def_ev, step=10, key=f"tcf1_ev_d{day_num}")
+        with sc3:
+            cng_cap = st.number_input("Punch CNG Limit", min_value=0, max_value=2000, value=def_cng, step=10, key=f"tcf1_cng_d{day_num}")
+        with sc4:
+            rem_petrol = total_cap - ev_cap - cng_cap
+            if rem_petrol < 0:
+                st.markdown(f"<span style='color:#fc8181;font-size:0.85rem;font-weight:600;'>Petrol: {rem_petrol} ⚠️</span>", unsafe_allow_html=True)
+            else:
+                st.markdown(f"<span style='color:#a0aec0;font-size:0.85rem;'>Petrol: <strong>{rem_petrol}</strong></span>", unsafe_allow_html=True)
+        tcf1_caps.append(total_cap)
+        tcf1_ev.append(ev_cap)
+        tcf1_cng.append(cng_cap)
+        
+    st.session_state["tcf1_capacities"] = tcf1_caps
+    st.session_state["tcf1_ev"] = tcf1_ev
+    st.session_state["tcf1_cng"] = tcf1_cng
+
+with cap_col2:
+    st.markdown("### TCF-2 (Harrier / Safari) Daily Targets")
+    
+    tcf2_caps = []
+    tcf2_eturna = []
+    tcf2_tgdi = []
+    
+    for idx, (day_num, def_total, def_ev, def_tgdi) in enumerate([
+        ("1", 250, 160, 40),
+        ("2", 250, 160, 40),
+        ("3", 250, 160, 40)
+    ]):
+        st.markdown(f"**Day- {day_num}**")
+        sc1, sc2, sc3, sc4 = st.columns(4)
+        with sc1:
+            total_cap = st.number_input("Total Target", min_value=0, max_value=2000, value=def_total, step=50, key=f"tcf2_cap_d{day_num}")
+        with sc2:
+            et_cap = st.number_input("Eturna EV Limit", min_value=0, max_value=2000, value=def_ev, step=10, key=f"tcf2_et_d{day_num}")
+        with sc3:
+            tg_cap = st.number_input("TGDI Petrol Limit", min_value=0, max_value=2000, value=def_tgdi, step=10, key=f"tcf2_tg_d{day_num}")
+        with sc4:
+            rem_diesel = total_cap - et_cap - tg_cap
+            if rem_diesel < 0:
+                st.markdown(f"<span style='color:#fc8181;font-size:0.85rem;font-weight:600;'>Diesel: {rem_diesel} ⚠️</span>", unsafe_allow_html=True)
+            else:
+                st.markdown(f"<span style='color:#a0aec0;font-size:0.85rem;'>Diesel: <strong>{rem_diesel}</strong></span>", unsafe_allow_html=True)
+        tcf2_caps.append(total_cap)
+        tcf2_eturna.append(et_cap)
+        tcf2_tgdi.append(tg_cap)
+        
+    st.session_state["tcf2_capacities"] = tcf2_caps
+    st.session_state["tcf2_eturna"] = tcf2_eturna
+    st.session_state["tcf2_tgdi"] = tcf2_tgdi
+
+st.markdown('<div class="styled-divider"></div>', unsafe_allow_html=True)
+
+
+# ─────────────────────────────────────────────
 # GROUP 2 — TODAY'S LISTS
 # ─────────────────────────────────────────────
 st.markdown('<div class="styled-divider"></div>', unsafe_allow_html=True)
@@ -606,12 +738,18 @@ if generate_clicked:
             if x1_biw_wip is not None:
                 tcf1_wip_files.append(x1_biw_wip)
                 
+            tcf1_capacities = st.session_state.get("tcf1_capacities", [900, 900, 900, 900])
+            tcf1_ev = st.session_state.get("tcf1_ev", [160, 160, 160, 160])
+            tcf1_cng = st.session_state.get("tcf1_cng", [350, 200, 350, 350])
             tcf1_wb = update_paint_float_data(
                 tcf1_wb, paint_float, "TCF1", 
                 expected_qty=expected_qty_tcf1,
                 wip_files=tcf1_wip_files,
                 yest_plan_file_or_stream=yest_tcf1,
-                next_3days_biw_plan=next_3days_biw_plan
+                next_3days_biw_plan=next_3days_biw_plan,
+                daily_capacities=tcf1_capacities,
+                sub_limits_1=tcf1_ev,
+                sub_limits_2=tcf1_cng
             )
             
             tcf1_out = io.BytesIO()
@@ -626,12 +764,18 @@ if generate_clicked:
             if wip_q5 is not None:
                 tcf2_wip_files.append(wip_q5)
                 
+            tcf2_capacities = st.session_state.get("tcf2_capacities", [250, 250, 250])
+            tcf2_eturna = st.session_state.get("tcf2_eturna", [160, 160, 160])
+            tcf2_tgdi = st.session_state.get("tcf2_tgdi", [100, 100, 100])
             tcf2_wb = update_paint_float_data(
                 tcf2_wb, paint_float, "TCF2", 
                 expected_qty=expected_qty_tcf2,
                 wip_files=tcf2_wip_files,
                 yest_plan_file_or_stream=yest_tcf2,
-                next_3days_biw_plan=next_3days_biw_plan
+                next_3days_biw_plan=next_3days_biw_plan,
+                daily_capacities=tcf2_capacities,
+                sub_limits_1=tcf2_eturna,
+                sub_limits_2=tcf2_tgdi
             )
             
             tcf2_out = io.BytesIO()
@@ -653,10 +797,15 @@ if generate_clicked:
 # Render generated output dashboards if state is set
 if st.session_state.get("plans_generated", False):
     
+    tcf1_caps = st.session_state.get("tcf1_capacities", [900, 900, 900, 900])
+    tcf2_caps = st.session_state.get("tcf2_capacities", [250, 250, 250])
+    tcf1_cap_strs = [f"{cap} (Holiday)" if cap == 0 else str(cap) for cap in tcf1_caps]
+    tcf2_cap_strs = [f"{cap} (Holiday)" if cap == 0 else str(cap) for cap in tcf2_caps]
+    
     st.success(
         f"✅  **3-Day Production Plans generated successfully!**\n\n"
-        f"- TCF-1 (Punch/Altroz): Daily target capacity `900`. Day 1 Sequence completed, Days 2 & 3 generated.\n"
-        f"- TCF-2 (Harrier/Safari): Daily target capacity `250`. Day 1 Sequence completed, Days 2 & 3 generated.",
+        f"- TCF-1 (Punch/Altroz): Day 1 Capacity: `{tcf1_cap_strs[0]}`, Day 2: `{tcf1_cap_strs[1]}`, Day 3: `{tcf1_cap_strs[2]}`, Day 4: `{tcf1_cap_strs[3]}`.\n"
+        f"- TCF-2 (Harrier/Safari): Day 1 Capacity: `{tcf2_cap_strs[0]}`, Day 2: `{tcf2_cap_strs[1]}`, Day 3: `{tcf2_cap_strs[2]}`.",
         icon="✅"
     )
     
@@ -700,11 +849,11 @@ if st.session_state.get("plans_generated", False):
                             <strong>{t1['colors']['light_green']}</strong>
                         </div>
                         <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#DDEBF7; margin-right:8px; border:1px solid rgba(0,0,0,0.15);"></span>Critical WIPs (Light Blue):</span>
+                            <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#DDEBF7; margin-right:8px; border:1px solid rgba(0,0,0,0.15);"></span>WIP in BIW (Light Blue):</span>
                             <strong>{t1['colors']['light_blue']}</strong>
                         </div>
                         <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#FFF2CC; margin-right:8px; border:1px solid rgba(0,0,0,0.15);"></span>Pending BIW Backlog (Light Yellow):</span>
+                            <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#FFF2CC; margin-right:8px; border:1px solid rgba(0,0,0,0.15);"></span>BIW Plan Loaded (Production Pending) (Light Yellow):</span>
                             <strong>{t1['colors']['light_yellow']}</strong>
                         </div>
                         <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -722,11 +871,11 @@ if st.session_state.get("plans_generated", False):
                             <strong>{t2['colors']['light_green']}</strong>
                         </div>
                         <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#DDEBF7; margin-right:8px; border:1px solid rgba(0,0,0,0.15);"></span>Critical WIPs (Light Blue):</span>
+                            <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#DDEBF7; margin-right:8px; border:1px solid rgba(0,0,0,0.15);"></span>WIP in BIW (Light Blue):</span>
                             <strong>{t2['colors']['light_blue']}</strong>
                         </div>
                         <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#FFF2CC; margin-right:8px; border:1px solid rgba(0,0,0,0.15);"></span>Pending BIW Backlog (Light Yellow):</span>
+                            <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#FFF2CC; margin-right:8px; border:1px solid rgba(0,0,0,0.15);"></span>BIW Plan Loaded (Production Pending) (Light Yellow):</span>
                             <strong>{t2['colors']['light_yellow']}</strong>
                         </div>
                         <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -757,7 +906,12 @@ if st.session_state.get("plans_generated", False):
         unsafe_allow_html=True,
     )
     
-    sum_col1, sum_col2, sum_col3 = st.columns(3, gap="large")
+    tcf1_ev = st.session_state.get("tcf1_ev", [160, 90, 160, 150])
+    tcf1_cng = st.session_state.get("tcf1_cng", [350, 200, 350, 350])
+    tcf2_eturna = st.session_state.get("tcf2_eturna", [160, 160, 160])
+    tcf2_tgdi = st.session_state.get("tcf2_tgdi", [100, 100, 100])
+
+    sum_col1, sum_col2, sum_col3, sum_col4 = st.columns(4, gap="large")
     
     with sum_col1:
         st.markdown(
@@ -765,22 +919,22 @@ if st.session_state.get("plans_generated", False):
             <div style="background:rgba(99,179,237,0.03); border:1px solid rgba(99,179,237,0.1); border-radius:15px; padding:1.5rem; text-align:center; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
                 <div style="font-size:2.5rem; margin-bottom:0.5rem;">⚡</div>
                 <h4 style="color:#63b3ed; margin:0 0 0.2rem 0; font-size:1.2rem;">NOVA (Punch EV)</h4>
-                <p style="color:#a0aec0; font-size:0.75rem; margin:0 0 1rem 0;">Max Limit: 150 units/day</p>
+                <p style="color:#a0aec0; font-size:0.75rem; margin:0 0 1rem 0;">Daily Target Limits</p>
                 <div style="text-align:left; font-size:0.85rem; color:#e2e8f0; background:rgba(255,255,255,0.02); border-radius:10px; padding:0.8rem;">
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:0.3rem;">
                         <span>B&C Drops Today:</span> <strong>{t1['picked']['nova']}</strong>
                     </div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
-                        <span>Today (Day 1):</span> <span><strong>{t1['day1']['nova']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ 150</span></span>
+                        <span>Today (Day 1):</span> <span><strong>{t1['day1']['nova']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ {tcf1_ev[0]}</span></span>
                     </div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
-                        <span>Day 2 Plan:</span> <span><strong>{t1['day2']['nova']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ 150</span></span>
+                        <span>Day 2 Plan:</span> <span><strong>{t1['day2']['nova']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ {tcf1_ev[1]}</span></span>
                     </div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
-                        <span>Day 3 Plan:</span> <span><strong>{t1['day3']['nova']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ 150</span></span>
+                        <span>Day 3 Plan:</span> <span><strong>{t1['day3']['nova']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ {tcf1_ev[2]}</span></span>
                     </div>
                     <div style="display:flex; justify-content:space-between;">
-                        <span>Day 4 Plan:</span> <span><strong>{t1['day4']['nova']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ 150</span></span>
+                        <span>Day 4 Plan:</span> <span><strong>{t1['day4']['nova']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ {tcf1_ev[3]}</span></span>
                     </div>
                 </div>
             </div>
@@ -794,22 +948,22 @@ if st.session_state.get("plans_generated", False):
             <div style="background:rgba(237,137,54,0.03); border:1px solid rgba(237,137,54,0.1); border-radius:15px; padding:1.5rem; text-align:center; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
                 <div style="font-size:2.5rem; margin-bottom:0.5rem;">🔥</div>
                 <h4 style="color:#ed8936; margin:0 0 0.2rem 0; font-size:1.2rem;">Punch CNG</h4>
-                <p style="color:#a0aec0; font-size:0.75rem; margin:0 0 1rem 0;">Max Limit: 350 units/day</p>
+                <p style="color:#a0aec0; font-size:0.75rem; margin:0 0 1rem 0;">Daily Target Limits</p>
                 <div style="text-align:left; font-size:0.85rem; color:#e2e8f0; background:rgba(255,255,255,0.02); border-radius:10px; padding:0.8rem;">
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:0.3rem;">
                         <span>B&C Drops Today:</span> <strong>{t1['picked']['cng']}</strong>
                     </div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
-                        <span>Today (Day 1):</span> <span><strong>{t1['day1']['cng']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ 350</span></span>
+                        <span>Today (Day 1):</span> <span><strong>{t1['day1']['cng']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ {tcf1_cng[0]}</span></span>
                     </div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
-                        <span>Day 2 Plan:</span> <span><strong>{t1['day2']['cng']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ 350</span></span>
+                        <span>Day 2 Plan:</span> <span><strong>{t1['day2']['cng']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ {tcf1_cng[1]}</span></span>
                     </div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
-                        <span>Day 3 Plan:</span> <span><strong>{t1['day3']['cng']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ 350</span></span>
+                        <span>Day 3 Plan:</span> <span><strong>{t1['day3']['cng']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ {tcf1_cng[2]}</span></span>
                     </div>
                     <div style="display:flex; justify-content:space-between;">
-                        <span>Day 4 Plan:</span> <span><strong>{t1['day4']['cng']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ 350</span></span>
+                        <span>Day 4 Plan:</span> <span><strong>{t1['day4']['cng']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ {tcf1_cng[3]}</span></span>
                     </div>
                 </div>
             </div>
@@ -823,19 +977,19 @@ if st.session_state.get("plans_generated", False):
             <div style="background:rgba(72,187,120,0.03); border:1px solid rgba(72,187,120,0.1); border-radius:15px; padding:1.5rem; text-align:center; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
                 <div style="font-size:2.5rem; margin-bottom:0.5rem;">🌱</div>
                 <h4 style="color:#48bb78; margin:0 0 0.2rem 0; font-size:1.2rem;">Eturna (Harrier EV)</h4>
-                <p style="color:#a0aec0; font-size:0.75rem; margin:0 0 1rem 0;">Max Limit: 160 units/day</p>
+                <p style="color:#a0aec0; font-size:0.75rem; margin:0 0 1rem 0;">Daily Target Limits</p>
                 <div style="text-align:left; font-size:0.85rem; color:#e2e8f0; background:rgba(255,255,255,0.02); border-radius:10px; padding:0.8rem;">
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:0.3rem;">
                         <span>B&C Drops Today:</span> <strong>{t2['picked']['eturna']}</strong>
                     </div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
-                        <span>Today (Day 1):</span> <span><strong>{t2['day1']['eturna']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ 160</span></span>
+                        <span>Today (Day 1):</span> <span><strong>{t2['day1']['eturna']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ {tcf2_eturna[0]}</span></span>
                     </div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
-                        <span>Day 2 Plan:</span> <span><strong>{t2['day2']['eturna']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ 160</span></span>
+                        <span>Day 2 Plan:</span> <span><strong>{t2['day2']['eturna']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ {tcf2_eturna[1]}</span></span>
                     </div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
-                        <span>Day 3 Plan:</span> <span><strong>{t2['day3']['eturna']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ 160</span></span>
+                        <span>Day 3 Plan:</span> <span><strong>{t2['day3']['eturna']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ {tcf2_eturna[2]}</span></span>
                     </div>
                     <div style="display:flex; justify-content:space-between; color:#718096;">
                         <span>Day 4 Plan:</span> <span>Not Applicable</span>
@@ -845,8 +999,137 @@ if st.session_state.get("plans_generated", False):
             """,
             unsafe_allow_html=True
         )
-        
 
+    with sum_col4:
+        st.markdown(
+            f"""
+            <div style="background:rgba(167,139,250,0.03); border:1px solid rgba(167,139,250,0.1); border-radius:15px; padding:1.5rem; text-align:center; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
+                <div style="font-size:2.5rem; margin-bottom:0.5rem;">🏎️</div>
+                <h4 style="color:#a78bfa; margin:0 0 0.2rem 0; font-size:1.2rem;">TGDI (Petrol)</h4>
+                <p style="color:#a0aec0; font-size:0.75rem; margin:0 0 1rem 0;">Daily Target Limits</p>
+                <div style="text-align:left; font-size:0.85rem; color:#e2e8f0; background:rgba(255,255,255,0.02); border-radius:10px; padding:0.8rem;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:0.3rem;">
+                        <span>B&C Drops Today:</span> <strong>{t2['picked']['tgdi']}</strong>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
+                        <span>Today (Day 1):</span> <span><strong>{t2['day1']['tgdi']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ {tcf2_tgdi[0]}</span></span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
+                        <span>Day 2 Plan:</span> <span><strong>{t2['day2']['tgdi']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ {tcf2_tgdi[1]}</span></span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
+                        <span>Day 3 Plan:</span> <span><strong>{t2['day3']['tgdi']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ {tcf2_tgdi[2]}</span></span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; color:#718096;">
+                        <span>Day 4 Plan:</span> <span>Not Applicable</span>
+                    </div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    # ─────────────────────────────────────────────
+    # TARGET SHORTAGE & PRODUCTION REMARKS
+    # ─────────────────────────────────────────────
+    st.markdown('<div class="styled-divider"></div>', unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div style="background:rgba(239,68,68,0.05); border:1px solid rgba(239,68,68,0.2); border-radius:12px; padding:1.2rem; margin-bottom:1.5rem;">
+            <h4 style="margin:0 0 0.5rem 0; color:#EF4444; font-size:1.1rem; display:flex; align-items:center; gap:8px;">
+                &#9888; Target Shortage & Production Remarks
+            </h4>
+            <p style="margin:0; font-size:0.85rem; color:#a0aec0; line-height:1.4;">
+                Generated warnings if available vehicles in float or BIW next 3 days plan fell short of target quantities.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    
+    remarks = []
+    
+    # Check TCF-1
+    t1_targets = t1.get('targets', {})
+    for day_key, day_name in [('day1', 'Day 1 (Today)'), ('day2', 'Day 2'), ('day3', 'Day 3'), ('day4', 'Day 4')]:
+        t_val = t1_targets.get(day_key, {})
+        p_val = t1.get(day_key, {})
+        day_cap = st.session_state.get("tcf1_capacities", [900, 900, 900, 900])[int(day_key[-1]) - 1]
+        if day_cap > 0:
+            for variant, label in [('nova', 'Punch EV'), ('cng', 'Punch CNG')]:
+                target = t_val.get(variant, 0)
+                planned = p_val.get(variant, 0)
+                if planned < target:
+                    shortage = target - planned
+                    remarks.append(f"TCF-1 {day_name} - **{label}**: Target was `{target}`, but only `{planned}` vehicles were available (Shortage of `{shortage}`).")
+                    
+    # Check TCF-2
+    t2_targets = t2.get('targets', {})
+    for day_key, day_name in [('day1', 'Day 1 (Today)'), ('day2', 'Day 2'), ('day3', 'Day 3')]:
+        t_val = t2_targets.get(day_key, {})
+        p_val = t2.get(day_key, {})
+        day_cap = st.session_state.get("tcf2_capacities", [250, 250, 250])[int(day_key[-1]) - 1]
+        if day_cap > 0:
+            for variant, label in [('eturna', 'Eturna EV'), ('tgdi', 'TGDI Petrol')]:
+                target = t_val.get(variant, 0)
+                planned = p_val.get(variant, 0)
+                if planned < target:
+                    shortage = target - planned
+                    remarks.append(f"TCF-2 {day_name} - **{label}**: Target was `{target}`, but only `{planned}` vehicles were available (Shortage of `{shortage}`).")
+                    
+    if remarks:
+        for r_text in remarks:
+            st.warning(r_text)
+    else:
+        st.success("All daily target quantities were fully met. No shortages identified in input files!")
+
+    # Scheduled VCs by Category Summary List
+    st.markdown('<div class="styled-divider"></div>', unsafe_allow_html=True)
+    with st.expander("🔍 View Scheduled Vehicle Codes (VCs) by Category", expanded=True):
+        tab1, tab2 = st.tabs(["TCF-1 (Punch/Altroz)", "TCF-2 (Harrier/Safari)"])
+        
+        with tab1:
+            t1_lists = t1.get("vc_lists", {})
+            for color_key, title, bg_color, text_color in [
+                ("light_green", "Paint Floor Float", "#E2EFDA", "#385723"),
+                ("light_blue", "WIP in BIW", "#DDEBF7", "#1F4E78"),
+                ("light_yellow", "BIW Plan Loaded (Production Pending)", "#FFF2CC", "#7F6000"),
+                ("light_pink", "Next 3-Days BIW Plan", "#FCE4D6", "#C65911")
+            ]:
+                vcs = t1_lists.get(color_key, [])
+                if vcs:
+                    st.markdown(
+                        f"""
+                        <div style="background:{bg_color}; padding:8px 12px; border-radius:6px; margin-bottom:8px; border:1px solid rgba(0,0,0,0.1); margin-top:12px;">
+                            <strong style="color:{text_color};">{title} ({len(vcs)} units)</strong>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+                    st.text_area(f"VCs for {title} (TCF-1)", value=", ".join(vcs), height=100, key=f"tcf1_vc_text_{color_key}", disabled=True)
+                else:
+                    st.info(f"No vehicles scheduled from {title} for TCF-1.")
+                    
+        with tab2:
+            t2_lists = t2.get("vc_lists", {})
+            for color_key, title, bg_color, text_color in [
+                ("light_green", "Paint Floor Float", "#E2EFDA", "#385723"),
+                ("light_blue", "WIP in BIW", "#DDEBF7", "#1F4E78"),
+                ("light_yellow", "BIW Plan Loaded (Production Pending)", "#FFF2CC", "#7F6000"),
+                ("light_pink", "Next 3-Days BIW Plan", "#FCE4D6", "#C65911")
+            ]:
+                vcs = t2_lists.get(color_key, [])
+                if vcs:
+                    st.markdown(
+                        f"""
+                        <div style="background:{bg_color}; padding:8px 12px; border-radius:6px; margin-bottom:8px; border:1px solid rgba(0,0,0,0.1); margin-top:12px;">
+                            <strong style="color:{text_color};">{title} ({len(vcs)} units)</strong>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+                    st.text_area(f"VCs for {title} (TCF-2)", value=", ".join(vcs), height=100, key=f"tcf2_vc_text_{color_key}", disabled=True)
+                else:
+                    st.info(f"No vehicles scheduled from {title} for TCF-2.")
 
 
 # ─────────────────────────────────────────────

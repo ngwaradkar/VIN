@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import openpyxl
 import io
 import os
@@ -108,6 +109,29 @@ def initialize_tcf1_workbook(file_path_or_stream):
         yesterday_day1_date = ws_val.cell(row=2, column=8).value
         ws.cell(row=2, column=4).value = yesterday_day1_date
         
+        # Calculate next 4 planning days skipping Sundays
+        import datetime
+        start_date = yesterday_day1_date
+        if isinstance(start_date, datetime.datetime):
+            start_date = start_date.date()
+            
+        def get_next_planning_days_t1(s_date, count=4):
+            days = []
+            curr = s_date
+            while len(days) < count:
+                curr += datetime.timedelta(days=1)
+                if curr.weekday() == 6: # Sunday
+                    continue
+                days.append(curr)
+            return days
+            
+        if start_date is not None and not isinstance(start_date, str):
+            planning_days = get_next_planning_days_t1(start_date, 4)
+            ws.cell(row=2, column=8).value = planning_days[0]
+            ws.cell(row=2, column=9).value = planning_days[1]
+            ws.cell(row=2, column=10).value = planning_days[2]
+            ws.cell(row=2, column=11).value = planning_days[3]
+        
         for row in range(27, 82):
             # Read evaluated value from col H (8)
             day1_val = ws_val.cell(row=row, column=8).value
@@ -173,6 +197,28 @@ def initialize_tcf2_workbook(file_path_or_stream):
         # Copy yesterday's Day 1 date (col I) to Today's Today Plan date (col E)
         yesterday_day1_date = ws_val.cell(row=2, column=9).value
         ws.cell(row=2, column=5).value = yesterday_day1_date
+        
+        # Calculate next 3 planning days skipping Sundays
+        import datetime
+        start_date = yesterday_day1_date
+        if isinstance(start_date, datetime.datetime):
+            start_date = start_date.date()
+            
+        def get_next_planning_days_t2(s_date, count=3):
+            days = []
+            curr = s_date
+            while len(days) < count:
+                curr += datetime.timedelta(days=1)
+                if curr.weekday() == 6: # Sunday
+                    continue
+                days.append(curr)
+            return days
+            
+        if start_date is not None and not isinstance(start_date, str):
+            planning_days = get_next_planning_days_t2(start_date, 3)
+            ws.cell(row=2, column=9).value = planning_days[0]
+            ws.cell(row=2, column=10).value = planning_days[1]
+            ws.cell(row=2, column=11).value = planning_days[2]
         
         for row in range(4, 207):
             # Read evaluated value from col I (9)
@@ -361,7 +407,8 @@ def update_today_vin_generation(wb, vin_list_file_or_stream, track):
 
 def update_paint_float_data(wb, paint_float_file_or_stream, track, expected_qty=None,
                             wip_files=None, yest_plan_file_or_stream=None,
-                            next_3days_biw_plan=None):
+                            next_3days_biw_plan=None, daily_capacities=None,
+                            sub_limits_1=None, sub_limits_2=None):
     """
     Parses the Paint Float Report and updates columns D, E, F, G, H of
     the 'Stage wise Float' (TCF-1) or 'Stage wise float' (TCF-2) sheet,
@@ -506,6 +553,7 @@ def update_paint_float_data(wb, paint_float_file_or_stream, track, expected_qty=
     color_ws = wb[color_sheet_name]
     
     color_vc_col = 2 if track == 'TCF1' else 3
+    engine_code_col = 3 if track == 'TCF1' else 4
     sales_desc_col = 5
     colour_col = 6
     
@@ -516,7 +564,8 @@ def update_paint_float_data(wb, paint_float_file_or_stream, track, expected_qty=
             vc_str = str(vc_val).strip().upper()
             sales_desc = color_ws.cell(row=r_color, column=sales_desc_col).value
             colour_val = color_ws.cell(row=r_color, column=colour_col).value
-            vc_lookup[vc_str] = (sales_desc, colour_val)
+            eng_code = color_ws.cell(row=r_color, column=engine_code_col).value
+            vc_lookup[vc_str] = (sales_desc, colour_val, eng_code)
 
     # 2. Parse/resolve target quantity
     if expected_qty is not None:
@@ -542,7 +591,7 @@ def update_paint_float_data(wb, paint_float_file_or_stream, track, expected_qty=
                 val_clean = str(val).strip().upper()
                 
                 # Retrieve from lookup to check Pune plant exclusions
-                desc_val, col_val = vc_lookup.get(val_clean, (None, None))
+                desc_val, col_val, eng_val = vc_lookup.get(val_clean, (None, None, ""))
                 desc_str = str(desc_val).strip().upper() if desc_val is not None else ''
                 color_str = str(col_val).strip().upper() if col_val is not None else ''
                 
@@ -700,7 +749,7 @@ def update_paint_float_data(wb, paint_float_file_or_stream, track, expected_qty=
                                 vc_str = str(val).strip().upper()
                                 if vc_str != '':
                                     # Apply Pune plant TCF exclusions
-                                    desc_val, col_val = vc_lookup.get(vc_str, (None, None))
+                                    desc_val, col_val, eng_val = vc_lookup.get(vc_str, (None, None, ""))
                                     desc_str = str(desc_val).strip().upper() if desc_val is not None else ''
                                     color_str = str(col_val).strip().upper() if col_val is not None else ''
                                     
@@ -711,68 +760,97 @@ def update_paint_float_data(wb, paint_float_file_or_stream, track, expected_qty=
                 print(f"Error reading Next 3-Days BIW Plan: {e_biw}")
                             
         # Assemble master queue and apply constraints
-        def identify_vehicle_type(vc, desc):
+        def identify_vehicle_type(vc, desc, eng_code=""):
             vc_upper = str(vc).upper()
             desc_upper = str(desc or '').upper()
-            if 'PUNCH.EV' in desc_upper or 'PUNCH EV' in desc_upper or 'PUNCH.EV' in vc_upper or 'PUNCH EV' in vc_upper:
+            eng_upper = str(eng_code or '').strip().upper()
+            
+            # TCF-1
+            # EV
+            if eng_upper.startswith('5468') or 'PUNCH.EV' in desc_upper or 'PUNCH EV' in desc_upper or 'PUNCH.EV' in vc_upper or 'PUNCH EV' in vc_upper:
                 return 'NOVA'
-            if 'HARRIER.EV' in desc_upper or 'HARRIER EV' in desc_upper or 'HARRIER.EV' in vc_upper or 'HARRIER EV' in vc_upper:
+            # CNG
+            if 'CNG' in desc_upper or 'CNG' in vc_upper:
+                if 'PUNCH' in desc_upper or 'PUNCH' in vc_upper or eng_upper.startswith('5497'):
+                    return 'CNG'
+                    
+            # TCF-2
+            # EV (Eturna)
+            if eng_upper.startswith('5473') or eng_upper.startswith('5483') or 'HARRIER.EV' in desc_upper or 'HARRIER EV' in desc_upper or 'SAFARI.EV' in desc_upper or 'SAFARI EV' in desc_upper or 'HARRIER.EV' in vc_upper or 'SAFARI.EV' in vc_upper:
                 return 'ETURNA'
-            if 'CNG' in desc_upper and ('PUNCH' in desc_upper or 'PUNCH' in vc_upper):
-                return 'CNG'
+            # TGDI (Petrol)
+            if eng_upper.startswith('5478') or eng_upper.startswith('5479') or 'TGDI' in desc_upper or 'TGDI' in vc_upper:
+                return 'TGDI'
+            if ' BS6 P' in desc_upper or ' BS6 P2 P' in desc_upper or 'BS6 P2 P' in desc_upper:
+                if 'BS6 D' not in desc_upper and 'P2 D' not in desc_upper:
+                    return 'TGDI'
+                    
             return 'OTHER'
 
-        def build_day_sequence(queue, max_capacity, is_tcf1=True):
-            day_list = []
-            postponed = []
-            
-            n_count = 0
-            c_count = 0
-            e_count = 0
-            
-            for item in queue:
-                vc, color_key = item
-                desc_val, col_val = vc_lookup.get(vc, (None, None))
-                v_type = identify_vehicle_type(vc, desc_val)
+        def build_day_sequence(indexed_queue, max_capacity, lim1_val, lim2_val, is_tcf1=True):
+            if max_capacity <= 0:
+                return [], indexed_queue, 0, 0
                 
-                # Check limits
-                if len(day_list) >= max_capacity:
-                    postponed.append(item)
-                    continue
-                    
+            # 1. Separate into categories
+            ev_list = []
+            c2_list = []
+            other_list = []
+            
+            for orig_idx, item in indexed_queue:
+                vc, color_key = item
+                desc_val, col_val, eng_val = vc_lookup.get(vc, (None, None, ""))
+                v_type = identify_vehicle_type(vc, desc_val, eng_val)
+                
                 if is_tcf1:
-                    if v_type == 'NOVA' and n_count >= 150:
-                        postponed.append(item)
-                        continue
-                    if v_type == 'CNG' and c_count >= 350:
-                        postponed.append(item)
-                        continue
+                    if v_type == 'NOVA':
+                        ev_list.append((orig_idx, item))
+                    elif v_type == 'CNG':
+                        c2_list.append((orig_idx, item))
+                    else:
+                        other_list.append((orig_idx, item))
                 else:
-                    if v_type == 'ETURNA' and e_count >= 160:
-                        postponed.append(item)
-                        continue
-                        
-                day_list.append(item)
-                if v_type == 'NOVA':
-                    n_count += 1
-                elif v_type == 'CNG':
-                    c_count += 1
-                elif v_type == 'ETURNA':
-                    e_count += 1
-                    
-            return day_list, postponed, n_count, c_count, e_count
+                    if v_type == 'ETURNA':
+                        ev_list.append((orig_idx, item))
+                    elif v_type == 'TGDI':
+                        c2_list.append((orig_idx, item))
+                    else:
+                        other_list.append((orig_idx, item))
+            
+            # 2. Slice according to target capacities
+            rem_val = max(0, max_capacity - lim1_val - lim2_val)
+            
+            selected_ev = ev_list[:lim1_val]
+            selected_c2 = c2_list[:lim2_val]
+            selected_other = other_list[:rem_val]
+            
+            # 3. Combine selected items and sort by original index to preserve priority order
+            selected_combined = selected_ev + selected_c2 + selected_other
+            selected_combined.sort(key=lambda x: x[0])
+            
+            day_list = [item for orig_idx, item in selected_combined]
+            
+            # 4. Form postponed queue of non-selected items
+            selected_orig_indices = set(orig_idx for orig_idx, item in selected_combined)
+            postponed = [(orig_idx, item) for orig_idx, item in indexed_queue if orig_idx not in selected_orig_indices]
+            
+            c1_count = len(selected_ev)
+            c2_count = len(selected_c2)
+            
+            return day_list, postponed, c1_count, c2_count
 
         # Picked VCs counts (Paint Float expected drops)
-        picked_n, picked_c, picked_e = 0, 0, 0
+        picked_n, picked_c, picked_e, picked_t = 0, 0, 0, 0
         for vc in picked_vcs:
-            desc_val, col_val = vc_lookup.get(vc, (None, None))
-            v_type = identify_vehicle_type(vc, desc_val)
+            desc_val, col_val, eng_val = vc_lookup.get(vc, (None, None, ""))
+            v_type = identify_vehicle_type(vc, desc_val, eng_val)
             if v_type == 'NOVA':
                 picked_n += 1
             elif v_type == 'CNG':
                 picked_c += 1
             elif v_type == 'ETURNA':
                 picked_e += 1
+            elif v_type == 'TGDI':
+                picked_t += 1
 
         # Assemble master queue
         master_queue = []
@@ -780,23 +858,50 @@ def update_paint_float_data(wb, paint_float_file_or_stream, track, expected_qty=
         master_queue.extend(wip_vcs)
         master_queue.extend(master_yest_queue)
         
+        # Unique priority indexing
+        indexed_master_queue = list(enumerate(master_queue))
+        
         is_tcf1 = (track == 'TCF1')
-        daily_capacity = 900 if is_tcf1 else 250
+        if daily_capacities is None:
+            caps = [900, 900, 900, 900] if is_tcf1 else [250, 250, 250]
+        else:
+            caps = list(daily_capacities)
+            expected_len = 4 if is_tcf1 else 3
+            while len(caps) < expected_len:
+                caps.append(900 if is_tcf1 else 250)
+                
+        # Resolve sub limits 1 (EV / Eturna)
+        if sub_limits_1 is None:
+            lim1 = [160, 160, 160, 160] if is_tcf1 else [160, 160, 160]
+        else:
+            lim1 = list(sub_limits_1)
+            expected_len = 4 if is_tcf1 else 3
+            while len(lim1) < expected_len:
+                lim1.append(160 if is_tcf1 else 160)
+                
+        # Resolve sub limits 2 (CNG / TGDI)
+        if sub_limits_2 is None:
+            lim2 = [350, 200, 350, 350] if is_tcf1 else [40, 40, 40]
+        else:
+            lim2 = list(sub_limits_2)
+            expected_len = 4 if is_tcf1 else 3
+            while len(lim2) < expected_len:
+                lim2.append(350 if is_tcf1 else 40)
         
         # Day 1 Sequence
-        day1_list, remaining_queue, d1_n, d1_c, d1_e = build_day_sequence(master_queue, daily_capacity, is_tcf1)
+        day1_list, remaining_queue, d1_c1, d1_c2 = build_day_sequence(indexed_master_queue, caps[0], lim1[0], lim2[0], is_tcf1)
         
         # Day 2 Sequence
-        day2_list, remaining_queue, d2_n, d2_c, d2_e = build_day_sequence(remaining_queue, daily_capacity, is_tcf1)
+        day2_list, remaining_queue, d2_c1, d2_c2 = build_day_sequence(remaining_queue, caps[1], lim1[1], lim2[1], is_tcf1)
         
         # Day 3 Sequence
-        day3_list, remaining_queue, d3_n, d3_c, d3_e = build_day_sequence(remaining_queue, daily_capacity, is_tcf1)
+        day3_list, remaining_queue, d3_c1, d3_c2 = build_day_sequence(remaining_queue, caps[2], lim1[2], lim2[2], is_tcf1)
         
         # Day 4 Sequence (TCF-1 only)
         day4_list = []
-        d4_n, d4_c, d4_e = 0, 0, 0
+        d4_c1, d4_c2 = 0, 0
         if is_tcf1:
-            day4_list, remaining_queue, d4_n, d4_c, d4_e = build_day_sequence(remaining_queue, daily_capacity, is_tcf1)
+            day4_list, remaining_queue, d4_c1, d4_c2 = build_day_sequence(remaining_queue, caps[3], lim1[3], lim2[3], is_tcf1)
             
         # Store summary counts on workbook object
         all_planned_items = day1_list + day2_list + day3_list + day4_list
@@ -806,19 +911,49 @@ def update_paint_float_data(wb, paint_float_file_or_stream, track, expected_qty=
             'light_yellow': 0,
             'light_pink': 0
         }
+        vc_lists = {
+            'light_green': [],
+            'light_blue': [],
+            'light_yellow': [],
+            'light_pink': []
+        }
         for item in all_planned_items:
             vc, color_key = item
             if color_key in color_counts:
                 color_counts[color_key] += 1
+            if color_key in vc_lists:
+                vc_lists[color_key].append(vc)
                 
-        wb.summary_counts = {
-            'picked': {'nova': picked_n, 'cng': picked_c, 'eturna': picked_e},
-            'day1': {'nova': d1_n, 'cng': d1_c, 'eturna': d1_e},
-            'day2': {'nova': d2_n, 'cng': d2_c, 'eturna': d2_e},
-            'day3': {'nova': d3_n, 'cng': d3_c, 'eturna': d3_e},
-            'day4': {'nova': d4_n, 'cng': d4_c, 'eturna': d4_e},
-            'colors': color_counts
-        }
+        if is_tcf1:
+            wb.summary_counts = {
+                'picked': {'nova': picked_n, 'cng': picked_c, 'eturna': 0, 'tgdi': 0},
+                'day1': {'nova': d1_c1, 'cng': d1_c2, 'eturna': 0, 'tgdi': 0},
+                'day2': {'nova': d2_c1, 'cng': d2_c2, 'eturna': 0, 'tgdi': 0},
+                'day3': {'nova': d3_c1, 'cng': d3_c2, 'eturna': 0, 'tgdi': 0},
+                'day4': {'nova': d4_c1, 'cng': d4_c2, 'eturna': 0, 'tgdi': 0},
+                'targets': {
+                    'day1': {'nova': lim1[0], 'cng': lim2[0], 'eturna': 0, 'tgdi': 0},
+                    'day2': {'nova': lim1[1], 'cng': lim2[1], 'eturna': 0, 'tgdi': 0},
+                    'day3': {'nova': lim1[2], 'cng': lim2[2], 'eturna': 0, 'tgdi': 0},
+                    'day4': {'nova': lim1[3], 'cng': lim2[3], 'eturna': 0, 'tgdi': 0},
+                },
+                'colors': color_counts,
+                'vc_lists': vc_lists
+            }
+        else:
+            wb.summary_counts = {
+                'picked': {'nova': 0, 'cng': 0, 'eturna': picked_e, 'tgdi': picked_t},
+                'day1': {'nova': 0, 'cng': 0, 'eturna': d1_c1, 'tgdi': d1_c2},
+                'day2': {'nova': 0, 'cng': 0, 'eturna': d2_c1, 'tgdi': d2_c2},
+                'day3': {'nova': 0, 'cng': 0, 'eturna': d3_c1, 'tgdi': d3_c2},
+                'targets': {
+                    'day1': {'nova': 0, 'cng': 0, 'eturna': lim1[0], 'tgdi': lim2[0]},
+                    'day2': {'nova': 0, 'cng': 0, 'eturna': lim1[1], 'tgdi': lim2[1]},
+                    'day3': {'nova': 0, 'cng': 0, 'eturna': lim1[2], 'tgdi': lim2[2]},
+                },
+                'colors': color_counts,
+                'vc_lists': vc_lists
+            }
         
         # Define highlight patterns
         from openpyxl.styles import PatternFill
@@ -835,7 +970,7 @@ def update_paint_float_data(wb, paint_float_file_or_stream, track, expected_qty=
             row_idx = idx + 3
             if row_idx <= day1_ws.max_row:
                 day1_ws.cell(row=row_idx, column=2).value = vc
-                desc_val, col_val = vc_lookup.get(vc, (None, None))
+                desc_val, col_val, eng_val = vc_lookup.get(vc, (None, None, ""))
                 day1_ws.cell(row=row_idx, column=3).value = desc_val
                 day1_ws.cell(row=row_idx, column=4).value = col_val
                 if day1_ws.cell(row=row_idx, column=1).value is None:
@@ -885,7 +1020,7 @@ def update_paint_float_data(wb, paint_float_file_or_stream, track, expected_qty=
             row_idx = idx + 3
             if row_idx <= day1_ws.max_row:
                 day1_ws.cell(row=row_idx, column=2).value = vc
-                desc_val, col_val = vc_lookup.get(vc, (None, None))
+                desc_val, col_val, eng_val = vc_lookup.get(vc, (None, None, ""))
                 day1_ws.cell(row=row_idx, column=3).value = desc_val
                 day1_ws.cell(row=row_idx, column=4).value = col_val
                 if day1_ws.cell(row=row_idx, column=1).value is None:
