@@ -377,7 +377,10 @@ def update_today_vin_generation(wb, vin_list_file_or_stream, track):
             # Check for HTML signature (for .xls files exported as HTML tables)
             prefix = content[:300].lower()
             if b'<table' in prefix or b'<style' in prefix or b'<html' in prefix:
-                dfs = pd.read_html(io.BytesIO(content), header=0)
+                import re
+                clean_content = re.sub(rb'colspan=["\']?0["\']?', b'', content)
+                clean_content = re.sub(rb'rowspan=["\']?0["\']?', b'', clean_content)
+                dfs = pd.read_html(io.BytesIO(clean_content), header=0)
                 df = dfs[0]
             else:
                 # Determine format based on name attribute
@@ -511,10 +514,224 @@ def update_today_vin_generation(wb, vin_list_file_or_stream, track):
             
     return wb
 
+def extract_vcs_from_file(file_or_stream, track, vc_lookup, default_color='light_yellow'):
+    vcs = []
+    if file_or_stream is None:
+        return vcs
+        
+    import io
+    import pandas as pd
+    import openpyxl
+    
+    try:
+        if hasattr(file_or_stream, 'read'):
+            if hasattr(file_or_stream, 'seek'):
+                file_or_stream.seek(0)
+            content = file_or_stream.read()
+            if hasattr(file_or_stream, 'seek'):
+                file_or_stream.seek(0)
+        elif isinstance(file_or_stream, (str, bytes)):
+            if isinstance(file_or_stream, str):
+                with open(file_or_stream, 'rb') as f:
+                    content = f.read()
+            else:
+                content = file_or_stream
+        else:
+            return vcs
+    except Exception as e:
+        print(f"Error reading stream content: {e}")
+        return vcs
+
+    if not content:
+        return vcs
+
+    lower_content = content[:500].lower()
+    is_html = any(marker in lower_content for marker in [b'<table', b'<html', b'<style', b'<!doctype html', b'<?xml'])
+    
+    dfs = []
+    wb = None
+
+    if is_html:
+        try:
+            import re
+            clean_content = re.sub(rb'colspan=["\']?0["\']?', b'', content)
+            clean_content = re.sub(rb'rowspan=["\']?0["\']?', b'', clean_content)
+            dfs = pd.read_html(io.BytesIO(clean_content), header=0)
+        except Exception:
+            try:
+                dfs = pd.read_html(io.BytesIO(content), header=0)
+            except Exception:
+                pass
+
+    if not dfs:
+        try:
+            wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+        except Exception:
+            wb = None
+
+    if not dfs and wb is None:
+        try:
+            filename = getattr(file_or_stream, 'name', str(file_or_stream)).lower()
+            if filename.endswith('.xlsb'):
+                df = pd.read_excel(io.BytesIO(content), engine='pyxlsb')
+                dfs = [df]
+            else:
+                xl = pd.ExcelFile(io.BytesIO(content))
+                dfs = [xl.parse(sheet_name) for sheet_name in xl.sheet_names]
+        except Exception:
+            try:
+                df = pd.read_csv(io.BytesIO(content), encoding='utf-8')
+                dfs = [df]
+            except Exception:
+                try:
+                    df = pd.read_csv(io.BytesIO(content), encoding='latin1')
+                    dfs = [df]
+                except Exception:
+                    pass
+
+    # Extract VCs from Workbook (openpyxl)
+    if wb is not None:
+        if 'biw Next 2 days' in wb.sheetnames:
+            ws = wb['biw Next 2 days']
+            for col_idx in [2, 3, 4]:
+                for r in range(2, ws.max_row + 1):
+                    val = ws.cell(row=r, column=col_idx).value
+                    if val is not None and str(val).strip() != '':
+                        vc_str = str(val).strip().upper()
+                        vcs.append((vc_str, default_color))
+        else:
+            if track == 'TCF1':
+                target_sheets = ['Punch Seq', 'NOVA', 'Sheet1', 'Sheet2', 'Punch Summary']
+            else:
+                target_sheets = ['Q5', 'TGDI ', 'Eturna']
+            
+            matched_sheets = [s for s in wb.sheetnames if any(s.strip().upper() == t.strip().upper() for t in target_sheets)]
+            if not matched_sheets:
+                matched_sheets = wb.sheetnames
+
+            for target_sh in matched_sheets:
+                ws = wb[target_sh]
+                if ws.max_row < 2:
+                    continue
+                headers = [str(c.value).strip().upper() if c.value is not None else '' for c in ws[1]]
+                vc_col_idx = None
+                line_col_idx = None
+                color_col_idx = None
+                for idx, h in enumerate(headers):
+                    if vc_col_idx is None and any(pat in h for pat in ['ITEMCODE', 'ITEM CODE', 'ITEM_CODE', 'VEHICLE CODE', 'VEHICLE_CODE', 'VC']):
+                        vc_col_idx = idx + 1
+                    if line_col_idx is None and 'LINE' in h:
+                        line_col_idx = idx + 1
+                    if color_col_idx is None and ('COLOR' in h or 'COLOUR' in h):
+                        color_col_idx = idx + 1
+                if vc_col_idx is None:
+                    vc_col_idx = 2 if ws.max_column >= 2 else 1
+
+                for r in range(2, ws.max_row + 1):
+                    val = ws.cell(row=r, column=vc_col_idx).value
+                    if val is not None:
+                        vc_str = str(val).strip().upper()
+                        if vc_str != '':
+                            if line_col_idx is not None:
+                                line_val = str(ws.cell(row=r, column=line_col_idx).value or '').strip().upper()
+                                if line_val:
+                                    if line_val == 'X1' or 'X1' in line_val:
+                                        continue
+                                    if track == 'TCF1' and not any(pat in line_val for pat in ['X451', 'NOVA']):
+                                        continue
+                                    if track == 'TCF2' and 'Q5' not in line_val:
+                                        continue
+
+                            if color_col_idx is not None:
+                                file_col_val = str(ws.cell(row=r, column=color_col_idx).value or '').strip().upper()
+                                if file_col_val == '000' or '000' in file_col_val:
+                                    continue
+
+                            desc_val, col_val, svc_val = vc_lookup.get(vc_str, (None, None, ""))
+                            desc_str = str(desc_val).strip().upper() if desc_val is not None else ''
+                            color_str = str(col_val).strip().upper() if col_val is not None else ''
+                            if vc_str.startswith('5442') or 'ALTROZ' in desc_str or color_str == '000' or '000' in color_str:
+                                continue
+
+                            if track == 'TCF1':
+                                if not (vc_str.startswith('5497') or vc_str.startswith('5468') or 'PUNCH' in desc_str or 'NOVA' in desc_str):
+                                    if len(matched_sheets) == len(wb.sheetnames) and (vc_str.startswith('5604') or vc_str.startswith('5479') or vc_str.startswith('5473') or 'HARRIER' in desc_str or 'SAFARI' in desc_str):
+                                        continue
+                            elif track == 'TCF2':
+                                if not (vc_str.startswith('5604') or vc_str.startswith('5479') or vc_str.startswith('5473') or 'HARRIER' in desc_str or 'SAFARI' in desc_str):
+                                    if len(matched_sheets) == len(wb.sheetnames) and (vc_str.startswith('5497') or vc_str.startswith('5468') or 'PUNCH' in desc_str or 'NOVA' in desc_str):
+                                        continue
+
+                            vcs.append((vc_str, default_color))
+
+    # Extract VCs from DataFrames (pandas)
+    elif dfs:
+        for df in dfs:
+            if df.empty:
+                continue
+            if all(isinstance(c, int) for c in df.columns) or all(str(c).isdigit() for c in df.columns):
+                if any('vehicle' in str(v).lower() or 'item' in str(v).lower() or 'vc' in str(v).lower() for v in df.iloc[0].values if pd.notna(v)):
+                    df.columns = [str(v).strip() for v in df.iloc[0].values]
+                    df = df[1:].reset_index(drop=True)
+            vc_col = None
+            line_col = None
+            color_col = None
+
+            for c in df.columns:
+                c_upper = str(c).strip().upper()
+                if vc_col is None and any(pat in c_upper for pat in ['ITEMCODE', 'ITEM CODE', 'ITEM_CODE', 'VEHICLE CODE', 'VEHICLE_CODE', 'VC']):
+                    vc_col = c
+                if line_col is None and 'LINE' in c_upper:
+                    line_col = c
+                if color_col is None and ('COLOR' in c_upper or 'COLOUR' in c_upper):
+                    color_col = c
+
+            if vc_col is None and len(df.columns) >= 2:
+                vc_col = df.columns[1]
+            elif vc_col is None and len(df.columns) >= 1:
+                vc_col = df.columns[0]
+            
+            if vc_col is not None:
+                for idx, row in df.iterrows():
+                    val = row[vc_col]
+                    if pd.isna(val):
+                        continue
+                    vc_str = str(val).strip().upper()
+                    if vc_str != '':
+                        if line_col is not None and pd.notna(row[line_col]):
+                            line_val = str(row[line_col]).strip().upper()
+                            if line_val:
+                                if line_val == 'X1' or 'X1' in line_val:
+                                    continue
+                                if track == 'TCF1' and not any(pat in line_val for pat in ['X451', 'NOVA']):
+                                    continue
+                                if track == 'TCF2' and 'Q5' not in line_val:
+                                    continue
+
+                        if color_col is not None and pd.notna(row[color_col]):
+                            file_col_val = str(row[color_col]).strip().upper()
+                            if file_col_val == '000' or '000' in file_col_val:
+                                continue
+
+                        desc_val, col_val, svc_val = vc_lookup.get(vc_str, (None, None, ""))
+                        desc_str = str(desc_val).strip().upper() if desc_val is not None else ''
+                        color_str = str(col_val).strip().upper() if col_val is not None else ''
+                        if vc_str.startswith('5442') or 'ALTROZ' in desc_str or color_str == '000' or '000' in color_str:
+                            continue
+                        if track == 'TCF1' and not (vc_str.startswith('5497') or vc_str.startswith('5468') or 'PUNCH' in desc_str or 'NOVA' in desc_str):
+                            if (vc_str.startswith('5604') or vc_str.startswith('5479') or vc_str.startswith('5473') or 'HARRIER' in desc_str or 'SAFARI' in desc_str):
+                                continue
+                        elif track == 'TCF2' and not (vc_str.startswith('5604') or vc_str.startswith('5479') or vc_str.startswith('5473') or 'HARRIER' in desc_str or 'SAFARI' in desc_str):
+                            if (vc_str.startswith('5497') or vc_str.startswith('5468') or 'PUNCH' in desc_str or 'NOVA' in desc_str):
+                                continue
+                        vcs.append((vc_str, default_color))
+                        
+    return vcs
+
 def update_paint_float_data(wb, paint_float_file_or_stream, track, expected_qty=None,
                             wip_files=None, yest_plan_file_or_stream=None,
-                            next_3days_biw_plan=None, daily_capacities=None,
-                            sub_limits_1=None, sub_limits_2=None):
+                            pending_plan_biw=None, next_3days_biw_plan=None,
+                            daily_capacities=None, sub_limits_1=None, sub_limits_2=None):
     """
     Parses the Paint Float Report, updates Table 2 of 'VIN & Expected VIN' (or 'VIN & Expected VIN ') sheet,
     populates the old 'Stage wise Float' and 'Vin Plan Check' sheets (if present) for backwards-compatibility,
@@ -534,7 +751,10 @@ def update_paint_float_data(wb, paint_float_file_or_stream, track, expected_qty=
             
             prefix = content[:300].lower()
             if b'<table' in prefix or b'<style' in prefix or b'<html' in prefix:
-                dfs = pd.read_html(io.BytesIO(content), header=0)
+                import re
+                clean_content = re.sub(rb'colspan=["\']?0["\']?', b'', content)
+                clean_content = re.sub(rb'rowspan=["\']?0["\']?', b'', clean_content)
+                dfs = pd.read_html(io.BytesIO(clean_content), header=0)
                 df = dfs[0]
             else:
                 filename = getattr(paint_float_file_or_stream, 'name', '').lower()
@@ -581,6 +801,11 @@ def update_paint_float_data(wb, paint_float_file_or_stream, track, expected_qty=
         
     if df.empty:
         return wb
+
+    if all(isinstance(c, int) for c in df.columns) or all(str(c).isdigit() for c in df.columns):
+        if any('vehicle' in str(v).lower() or 'shop' in str(v).lower() for v in df.iloc[0].values if pd.notna(v)):
+            df.columns = [str(v).strip() for v in df.iloc[0].values]
+            df = df[1:].reset_index(drop=True)
         
     # Helper to find column dynamically
     def find_col(patterns):
@@ -760,7 +985,7 @@ def update_paint_float_data(wb, paint_float_file_or_stream, track, expected_qty=
         raise ValueError(f"Sheet '{day1_sheet_name}' not found in the workbook.")
     day1_ws = wb[day1_sheet_name]
     
-    # 3-Day Plan sequencing
+    wip_vcs = []
     if wip_files is not None:
         wip_records = []
         if isinstance(wip_files, list):
@@ -781,317 +1006,245 @@ def update_paint_float_data(wb, paint_float_file_or_stream, track, expected_qty=
         wip_records.sort(key=lambda x: x['datetime'])
         wip_vcs = [(x['vc'], 'light_blue') for x in wip_records]
         
-        master_yest_queue = []
-        if yest_plan_file_or_stream is not None:
-            if hasattr(yest_plan_file_or_stream, 'read'):
-                if hasattr(yest_plan_file_or_stream, 'seek'):
-                    yest_plan_file_or_stream.seek(0)
-                content = yest_plan_file_or_stream.read()
-                if hasattr(yest_plan_file_or_stream, 'seek'):
-                    yest_plan_file_or_stream.seek(0)
-                yest_wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
-            else:
-                yest_wb = openpyxl.load_workbook(yest_plan_file_or_stream, data_only=True)
-                
-            if 'biw Next 2 days' in yest_wb.sheetnames:
-                yest_ws = yest_wb['biw Next 2 days']
-                cols_to_read = [2, 3, 4]  # Read all columns B, C, D
-                for col_idx in cols_to_read:
-                    for r in range(2, yest_ws.max_row + 1):
-                        val = yest_ws.cell(row=r, column=col_idx).value
-                        if val is not None and str(val).strip() != '':
-                            master_yest_queue.append((str(val).strip().upper(), 'light_yellow'))
+    master_yest_queue = []
+    if pending_plan_biw is not None:
+        master_yest_queue = extract_vcs_from_file(pending_plan_biw, track, vc_lookup, default_color='light_yellow')
+        
+    if len(master_yest_queue) == 0 and yest_plan_file_or_stream is not None:
+        master_yest_queue = extract_vcs_from_file(yest_plan_file_or_stream, track, vc_lookup, default_color='light_yellow')
+        
+    if next_3days_biw_plan is not None:
+        biw_vcs = extract_vcs_from_file(next_3days_biw_plan, track, vc_lookup, default_color='light_pink')
+        master_yest_queue.extend(biw_vcs)
                             
-        if next_3days_biw_plan is not None:
-            try:
-                if hasattr(next_3days_biw_plan, 'read'):
-                    if hasattr(next_3days_biw_plan, 'seek'):
-                        next_3days_biw_plan.seek(0)
-                    biw_content = next_3days_biw_plan.read()
-                    if hasattr(next_3days_biw_plan, 'seek'):
-                        next_3days_biw_plan.seek(0)
-                    biw_wb = openpyxl.load_workbook(io.BytesIO(biw_content), data_only=True)
-                else:
-                    biw_wb = openpyxl.load_workbook(next_3days_biw_plan, data_only=True)
-                
-                if track == 'TCF1':
-                    sheets_to_read = ['Punch Seq', 'NOVA']
-                else:
-                    sheets_to_read = ['Q5', 'TGDI ', 'Eturna']
-                
-                for sh_pat in sheets_to_read:
-                    target_sh = None
-                    for name in biw_wb.sheetnames:
-                        if name.strip().upper() == sh_pat.strip().upper():
-                            target_sh = name
-                            break
-                    if target_sh is not None:
-                        ws_biw = biw_wb[target_sh]
-                        headers = [str(c.value).strip().upper() if c.value is not None else '' for c in ws_biw[1]]
-                        vc_col_idx = None
-                        for idx, h in enumerate(headers):
-                            if any(pat in h for pat in ['ITEMCODE', 'ITEM CODE', 'ITEM_CODE', 'VEHICLE CODE', 'VEHICLE_CODE', 'VC']):
-                                vc_col_idx = idx + 1
-                                break
-                        if vc_col_idx is None:
-                            vc_col_idx = 2 if ws_biw.max_column >= 2 else 1
-                        
-                        for r in range(2, ws_biw.max_row + 1):
-                            val = ws_biw.cell(row=r, column=vc_col_idx).value
-                            if val is not None:
-                                vc_str = str(val).strip().upper()
-                                if vc_str != '':
-                                    desc_val, col_val, svc_val = vc_lookup.get(vc_str, (None, None, ""))
-                                    desc_str = str(desc_val).strip().upper() if desc_val is not None else ''
-                                    color_str = str(col_val).strip().upper() if col_val is not None else ''
-                                    
-                                    if vc_str.startswith('5442') or 'ALTROZ' in desc_str or color_str == '000' or '000' in color_str:
-                                        continue
-                                    master_yest_queue.append((vc_str, 'light_pink'))
-            except Exception as e_biw:
-                print(f"Error reading Next 3-Days BIW Plan: {e_biw}")
-                            
-        def identify_vehicle_type(vc, desc, svc=""):
-            vc_upper = str(vc).upper()
-            desc_upper = str(desc or '').upper()
-            svc_upper = str(svc or '').strip().upper()
+    def identify_vehicle_type(vc, desc, svc=""):
+        vc_upper = str(vc).upper()
+        desc_upper = str(desc or '').upper()
+        svc_upper = str(svc or '').strip().upper()
+        
+        # TCF-1 Nova (EV)
+        if svc_upper.startswith('5468') or 'PUNCH.EV' in desc_upper or 'PUNCH EV' in desc_upper or 'PUNCH.EV' in vc_upper or 'PUNCH EV' in vc_upper:
+            return 'NOVA'
+        # TCF-1 CNG
+        if 'CNG' in desc_upper or 'CNG' in vc_upper or svc_upper.startswith('549718') or svc_upper.startswith('549722') or svc_upper.startswith('549728'):
+            return 'CNG'
             
-            # TCF-1 Nova (EV)
-            if svc_upper.startswith('5468') or 'PUNCH.EV' in desc_upper or 'PUNCH EV' in desc_upper or 'PUNCH.EV' in vc_upper or 'PUNCH EV' in vc_upper:
-                return 'NOVA'
-            # TCF-1 CNG
-            if 'CNG' in desc_upper or 'CNG' in vc_upper or svc_upper.startswith('549718') or svc_upper.startswith('549722') or svc_upper.startswith('549728'):
-                return 'CNG'
-                
-            # TCF-2 Eturna (EV)
-            if svc_upper.startswith('5473') or svc_upper.startswith('5483') or 'HARRIER.EV' in desc_upper or 'HARRIER EV' in desc_upper or 'SAFARI.EV' in desc_upper or 'SAFARI EV' in desc_upper or 'HARRIER.EV' in vc_upper or 'SAFARI.EV' in vc_upper:
-                return 'ETURNA'
-            # TCF-2 TGDI (Petrol)
-            if svc_upper.startswith('5478') or svc_upper.startswith('5479') or 'TGDI' in desc_upper or 'TGDI' in vc_upper:
+        # TCF-2 Eturna (EV)
+        if svc_upper.startswith('5473') or svc_upper.startswith('5483') or 'HARRIER.EV' in desc_upper or 'HARRIER EV' in desc_upper or 'SAFARI.EV' in desc_upper or 'SAFARI EV' in desc_upper or 'HARRIER.EV' in vc_upper or 'SAFARI.EV' in vc_upper:
+            return 'ETURNA'
+        # TCF-2 TGDI (Petrol)
+        if svc_upper.startswith('5478') or svc_upper.startswith('5479') or 'TGDI' in desc_upper or 'TGDI' in vc_upper:
+            return 'TGDI'
+        if ' BS6 P' in desc_upper or ' BS6 P2 P' in desc_upper or 'BS6 P2 P' in desc_upper:
+            if 'BS6 D' not in desc_upper and 'P2 D' not in desc_upper:
                 return 'TGDI'
-            if ' BS6 P' in desc_upper or ' BS6 P2 P' in desc_upper or 'BS6 P2 P' in desc_upper:
-                if 'BS6 D' not in desc_upper and 'P2 D' not in desc_upper:
-                    return 'TGDI'
-                    
-            return 'OTHER'
-
-        def build_day_sequence(indexed_queue, max_capacity, lim1_val, lim2_val, is_tcf1=True):
-            if max_capacity <= 0:
-                return [], indexed_queue, 0, 0
                 
-            ev_list = []
-            c2_list = []
-            other_list = []
-            
-            for orig_idx, item in indexed_queue:
-                vc, color_key = item
-                desc_val, col_val, svc_val = vc_lookup.get(vc, (None, None, ""))
-                v_type = identify_vehicle_type(vc, desc_val, svc_val)
-                
-                if is_tcf1:
-                    if v_type == 'NOVA':
-                        ev_list.append((orig_idx, item))
-                    elif v_type == 'CNG':
-                        c2_list.append((orig_idx, item))
-                    else:
-                        other_list.append((orig_idx, item))
-                else:
-                    if v_type == 'ETURNA':
-                        ev_list.append((orig_idx, item))
-                    elif v_type == 'TGDI':
-                        c2_list.append((orig_idx, item))
-                    else:
-                        other_list.append((orig_idx, item))
-            
-            rem_val = max(0, max_capacity - lim1_val - lim2_val)
-            
-            selected_ev = ev_list[:lim1_val]
-            selected_c2 = c2_list[:lim2_val]
-            selected_other = other_list[:rem_val]
-            
-            selected_combined = selected_ev + selected_c2 + selected_other
-            selected_combined.sort(key=lambda x: x[0])
-            
-            day_list = [item for orig_idx, item in selected_combined]
-            selected_orig_indices = set(orig_idx for orig_idx, item in selected_combined)
-            postponed = [(orig_idx, item) for orig_idx, item in indexed_queue if orig_idx not in selected_orig_indices]
-            
-            c1_count = len(selected_ev)
-            c2_count = len(selected_c2)
-            
-            return day_list, postponed, c1_count, c2_count
+        return 'OTHER'
 
-        picked_n, picked_c, picked_e, picked_t = 0, 0, 0, 0
-        for vc in picked_vcs:
+    def build_day_sequence(indexed_queue, max_capacity, lim1_val, lim2_val, is_tcf1=True):
+        if max_capacity <= 0:
+            return [], indexed_queue, 0, 0
+            
+        ev_list = []
+        c2_list = []
+        other_list = []
+        
+        for orig_idx, item in indexed_queue:
+            vc, color_key = item
             desc_val, col_val, svc_val = vc_lookup.get(vc, (None, None, ""))
             v_type = identify_vehicle_type(vc, desc_val, svc_val)
-            if v_type == 'NOVA':
-                picked_n += 1
-            elif v_type == 'CNG':
-                picked_c += 1
-            elif v_type == 'ETURNA':
-                picked_e += 1
-            elif v_type == 'TGDI':
-                picked_t += 1
-
-        master_queue = []
-        master_queue.extend([(vc, 'light_green') for vc in remaining_vcs])
-        master_queue.extend(wip_vcs)
-        master_queue.extend(master_yest_queue)
-        
-        indexed_master_queue = list(enumerate(master_queue))
-        
-        is_tcf1 = (track == 'TCF1')
-        if daily_capacities is None:
-            caps = [900, 900, 900, 900] if is_tcf1 else [250, 250, 250, 250]
-        else:
-            caps = list(daily_capacities)
-            expected_len = 4
-            while len(caps) < expected_len:
-                caps.append(900 if is_tcf1 else 250)
-                
-        if sub_limits_1 is None:
-            lim1 = [160, 160, 160, 160]
-        else:
-            lim1 = list(sub_limits_1)
-            expected_len = 4
-            while len(lim1) < expected_len:
-                lim1.append(160)
-                
-        if sub_limits_2 is None:
-            lim2 = [350, 200, 350, 350] if is_tcf1 else [40, 40, 40, 40]
-        else:
-            lim2 = list(sub_limits_2)
-            expected_len = 4
-            while len(lim2) < expected_len:
-                lim2.append(350 if is_tcf1 else 40)
-        
-        day1_list, remaining_queue, d1_c1, d1_c2 = build_day_sequence(indexed_master_queue, caps[0], lim1[0], lim2[0], is_tcf1)
-        day2_list, remaining_queue, d2_c1, d2_c2 = build_day_sequence(remaining_queue, caps[1], lim1[1], lim2[1], is_tcf1)
-        day3_list, remaining_queue, d3_c1, d3_c2 = build_day_sequence(remaining_queue, caps[2], lim1[2], lim2[2], is_tcf1)
-        day4_list, remaining_queue, d4_c1, d4_c2 = build_day_sequence(remaining_queue, caps[3], lim1[3], lim2[3], is_tcf1)
             
-        all_planned_items = day1_list + day2_list + day3_list + day4_list
-        color_counts = {
-            'light_green': 0,
-            'light_blue': 0,
-            'light_yellow': 0,
-            'light_pink': 0
-        }
-        vc_lists = {
-            'light_green': [],
-            'light_blue': [],
-            'light_yellow': [],
-            'light_pink': []
-        }
-        for item in all_planned_items:
-            vc, color_key = item
-            if color_key in color_counts:
-                color_counts[color_key] += 1
-            if color_key in vc_lists:
-                vc_lists[color_key].append(vc)
-                
-        if is_tcf1:
-            wb.summary_counts = {
-                'picked': {'nova': picked_n, 'cng': picked_c, 'eturna': 0, 'tgdi': 0},
-                'day1': {'nova': d1_c1, 'cng': d1_c2, 'eturna': 0, 'tgdi': 0},
-                'day2': {'nova': d2_c1, 'cng': d2_c2, 'eturna': 0, 'tgdi': 0},
-                'day3': {'nova': d3_c1, 'cng': d3_c2, 'eturna': 0, 'tgdi': 0},
-                'day4': {'nova': d4_c1, 'cng': d4_c2, 'eturna': 0, 'tgdi': 0},
-                'targets': {
-                    'day1': {'nova': lim1[0], 'cng': lim2[0], 'eturna': 0, 'tgdi': 0},
-                    'day2': {'nova': lim1[1], 'cng': lim2[1], 'eturna': 0, 'tgdi': 0},
-                    'day3': {'nova': lim1[2], 'cng': lim2[2], 'eturna': 0, 'tgdi': 0},
-                    'day4': {'nova': lim1[3], 'cng': lim2[3], 'eturna': 0, 'tgdi': 0},
-                },
-                'colors': color_counts,
-                'vc_lists': vc_lists
-            }
-        else:
-            wb.summary_counts = {
-                'picked': {'nova': 0, 'cng': 0, 'eturna': picked_e, 'tgdi': picked_t},
-                'day1': {'nova': 0, 'cng': 0, 'eturna': d1_c1, 'tgdi': d1_c2},
-                'day2': {'nova': 0, 'cng': 0, 'eturna': d2_c1, 'tgdi': d2_c2},
-                'day3': {'nova': 0, 'cng': 0, 'eturna': d3_c1, 'tgdi': d3_c2},
-                'day4': {'nova': 0, 'cng': 0, 'eturna': d4_c1, 'tgdi': d4_c2},
-                'targets': {
-                    'day1': {'nova': 0, 'cng': 0, 'eturna': lim1[0], 'tgdi': lim2[0]},
-                    'day2': {'nova': 0, 'cng': 0, 'eturna': lim1[1], 'tgdi': lim2[1]},
-                    'day3': {'nova': 0, 'cng': 0, 'eturna': lim1[2], 'tgdi': lim2[2]},
-                    'day4': {'nova': 0, 'cng': 0, 'eturna': lim1[3], 'tgdi': lim2[3]},
-                },
-                'colors': color_counts,
-                'vc_lists': vc_lists
-            }
+            if is_tcf1:
+                if v_type == 'NOVA':
+                    ev_list.append((orig_idx, item))
+                elif v_type == 'CNG':
+                    c2_list.append((orig_idx, item))
+                else:
+                    other_list.append((orig_idx, item))
+            else:
+                if v_type == 'ETURNA':
+                    ev_list.append((orig_idx, item))
+                elif v_type == 'TGDI':
+                    c2_list.append((orig_idx, item))
+                else:
+                    other_list.append((orig_idx, item))
         
-        from openpyxl.styles import PatternFill
-        fills = {
-            'light_green': PatternFill(start_color='E2EFDA', end_color='E2EFDA', fill_type='solid'),
-            'light_blue': PatternFill(start_color='DDEBF7', end_color='DDEBF7', fill_type='solid'),
-            'light_yellow': PatternFill(start_color='FFF2CC', end_color='FFF2CC', fill_type='solid'),
-            'light_pink': PatternFill(start_color='FCE4D6', end_color='FCE4D6', fill_type='solid')
-        }
+        rem_val = max(0, max_capacity - lim1_val - lim2_val)
         
-        # Write Day 1 Sequence
-        for idx, item in enumerate(day1_list):
-            vc, color_key = item
-            row_idx = idx + 3
-            if row_idx <= day1_ws.max_row:
-                day1_ws.cell(row=row_idx, column=2).value = vc
-                desc_val, col_val, svc_val = vc_lookup.get(vc, (None, None, ""))
-                day1_ws.cell(row=row_idx, column=3).value = desc_val
-                day1_ws.cell(row=row_idx, column=4).value = col_val
-                if day1_ws.cell(row=row_idx, column=1).value is None:
-                    day1_ws.cell(row=row_idx, column=1).value = idx + 1
-                if color_key in fills:
-                    day1_ws.cell(row=row_idx, column=2).fill = fills[color_key]
-                    
-        # Write Day 2, Day 3, Day 4 to biw Next 2 days sheet
-        if 'biw Next 2 days' in wb.sheetnames:
-            biw_ws = wb['biw Next 2 days']
-            # Day 2 -> B (2)
-            for idx, item in enumerate(day2_list):
-                vc, color_key = item
-                row_idx = idx + 2
-                if row_idx <= biw_ws.max_row:
-                    biw_ws.cell(row=row_idx, column=2).value = vc
-                    if biw_ws.cell(row=row_idx, column=1).value is None:
-                        biw_ws.cell(row=row_idx, column=1).value = idx + 1
-                    if color_key in fills:
-                        biw_ws.cell(row=row_idx, column=2).fill = fills[color_key]
-            # Day 3 -> C (3)
-            for idx, item in enumerate(day3_list):
-                vc, color_key = item
-                row_idx = idx + 2
-                if row_idx <= biw_ws.max_row:
-                    biw_ws.cell(row=row_idx, column=3).value = vc
-                    if biw_ws.cell(row=row_idx, column=1).value is None:
-                        biw_ws.cell(row=row_idx, column=1).value = idx + 1
-                    if color_key in fills:
-                        biw_ws.cell(row=row_idx, column=3).fill = fills[color_key]
-            # Day 4 -> D (4)
-            for idx, item in enumerate(day4_list):
-                vc, color_key = item
-                row_idx = idx + 2
-                if row_idx <= biw_ws.max_row:
-                    biw_ws.cell(row=row_idx, column=4).value = vc
-                    if biw_ws.cell(row=row_idx, column=1).value is None:
-                        biw_ws.cell(row=row_idx, column=1).value = idx + 1
-                    if color_key in fills:
-                        biw_ws.cell(row=row_idx, column=4).fill = fills[color_key]
+        selected_ev = ev_list[:lim1_val]
+        selected_c2 = c2_list[:lim2_val]
+        selected_other = other_list[:rem_val]
+        
+        selected_combined = selected_ev + selected_c2 + selected_other
+        selected_combined.sort(key=lambda x: x[0])
+        
+        day_list = [item for orig_idx, item in selected_combined]
+        selected_orig_indices = set(orig_idx for orig_idx, item in selected_combined)
+        postponed = [(orig_idx, item) for orig_idx, item in indexed_queue if orig_idx not in selected_orig_indices]
+        
+        c1_count = len(selected_ev)
+        c2_count = len(selected_c2)
+        
+        return day_list, postponed, c1_count, c2_count
+
+    picked_n, picked_c, picked_e, picked_t = 0, 0, 0, 0
+    for vc in picked_vcs:
+        desc_val, col_val, svc_val = vc_lookup.get(vc, (None, None, ""))
+        v_type = identify_vehicle_type(vc, desc_val, svc_val)
+        if v_type == 'NOVA':
+            picked_n += 1
+        elif v_type == 'CNG':
+            picked_c += 1
+        elif v_type == 'ETURNA':
+            picked_e += 1
+        elif v_type == 'TGDI':
+            picked_t += 1
+
+    master_queue = []
+    master_queue.extend([(vc, 'light_green') for vc in remaining_vcs])
+    master_queue.extend(wip_vcs)
+    master_queue.extend(master_yest_queue)
+    
+    indexed_master_queue = list(enumerate(master_queue))
+    
+    is_tcf1 = (track == 'TCF1')
+    if daily_capacities is None:
+        caps = [900, 900, 900, 900] if is_tcf1 else [250, 250, 250, 250]
     else:
-        # Standard Phase 4 mode: only remaining Float VCs in Day 1 Sequence
-        from openpyxl.styles import PatternFill
-        lg_fill = PatternFill(start_color='E2EFDA', end_color='E2EFDA', fill_type='solid')
-        for idx, vc in enumerate(remaining_vcs):
-            row_idx = idx + 3
-            if row_idx <= day1_ws.max_row:
-                day1_ws.cell(row=row_idx, column=2).value = vc
-                desc_val, col_val, svc_val = vc_lookup.get(vc, (None, None, ""))
-                day1_ws.cell(row=row_idx, column=3).value = desc_val
-                day1_ws.cell(row=row_idx, column=4).value = col_val
-                if day1_ws.cell(row=row_idx, column=1).value is None:
-                    day1_ws.cell(row=row_idx, column=1).value = idx + 1
-                day1_ws.cell(row=row_idx, column=2).fill = lg_fill
-                    
+        caps = list(daily_capacities)
+        expected_len = 4
+        while len(caps) < expected_len:
+            caps.append(900 if is_tcf1 else 250)
+            
+    if sub_limits_1 is None:
+        lim1 = [160, 160, 160, 160] if is_tcf1 else [120, 120, 120, 120]
+    else:
+        lim1 = list(sub_limits_1)
+        expected_len = 4
+        def_lim1 = 160 if is_tcf1 else 120
+        while len(lim1) < expected_len:
+            lim1.append(def_lim1)
+            
+    if sub_limits_2 is None:
+        lim2 = [350, 350, 350, 350] if is_tcf1 else [40, 40, 40, 40]
+    else:
+        lim2 = list(sub_limits_2)
+        expected_len = 4
+        def_lim2 = 350 if is_tcf1 else 40
+        while len(lim2) < expected_len:
+            lim2.append(def_lim2)
+    
+    day1_list, remaining_queue, d1_c1, d1_c2 = build_day_sequence(indexed_master_queue, caps[0], lim1[0], lim2[0], is_tcf1)
+    day2_list, remaining_queue, d2_c1, d2_c2 = build_day_sequence(remaining_queue, caps[1], lim1[1], lim2[1], is_tcf1)
+    day3_list, remaining_queue, d3_c1, d3_c2 = build_day_sequence(remaining_queue, caps[2], lim1[2], lim2[2], is_tcf1)
+    day4_list, remaining_queue, d4_c1, d4_c2 = build_day_sequence(remaining_queue, caps[3], lim1[3], lim2[3], is_tcf1)
+        
+    all_planned_items = day1_list + day2_list + day3_list + day4_list
+    color_counts = {
+        'light_green': 0,
+        'light_blue': 0,
+        'light_yellow': 0,
+        'light_pink': 0
+    }
+    vc_lists = {
+        'light_green': [],
+        'light_blue': [],
+        'light_yellow': [],
+        'light_pink': []
+    }
+    for item in all_planned_items:
+        vc, color_key = item
+        if color_key in color_counts:
+            color_counts[color_key] += 1
+        if color_key in vc_lists:
+            vc_lists[color_key].append(vc)
+            
+    if is_tcf1:
+        wb.summary_counts = {
+            'picked': {'nova': picked_n, 'cng': picked_c, 'eturna': 0, 'tgdi': 0},
+            'day1': {'nova': d1_c1, 'cng': d1_c2, 'eturna': 0, 'tgdi': 0},
+            'day2': {'nova': d2_c1, 'cng': d2_c2, 'eturna': 0, 'tgdi': 0},
+            'day3': {'nova': d3_c1, 'cng': d3_c2, 'eturna': 0, 'tgdi': 0},
+            'day4': {'nova': d4_c1, 'cng': d4_c2, 'eturna': 0, 'tgdi': 0},
+            'targets': {
+                'day1': {'nova': lim1[0], 'cng': lim2[0], 'eturna': 0, 'tgdi': 0},
+                'day2': {'nova': lim1[1], 'cng': lim2[1], 'eturna': 0, 'tgdi': 0},
+                'day3': {'nova': lim1[2], 'cng': lim2[2], 'eturna': 0, 'tgdi': 0},
+                'day4': {'nova': lim1[3], 'cng': lim2[3], 'eturna': 0, 'tgdi': 0},
+            },
+            'colors': color_counts,
+            'vc_lists': vc_lists
+        }
+    else:
+        wb.summary_counts = {
+            'picked': {'nova': 0, 'cng': 0, 'eturna': picked_e, 'tgdi': picked_t},
+            'day1': {'nova': 0, 'cng': 0, 'eturna': d1_c1, 'tgdi': d1_c2},
+            'day2': {'nova': 0, 'cng': 0, 'eturna': d2_c1, 'tgdi': d2_c2},
+            'day3': {'nova': 0, 'cng': 0, 'eturna': d3_c1, 'tgdi': d3_c2},
+            'day4': {'nova': 0, 'cng': 0, 'eturna': d4_c1, 'tgdi': d4_c2},
+            'targets': {
+                'day1': {'nova': 0, 'cng': 0, 'eturna': lim1[0], 'tgdi': lim2[0]},
+                'day2': {'nova': 0, 'cng': 0, 'eturna': lim1[1], 'tgdi': lim2[1]},
+                'day3': {'nova': 0, 'cng': 0, 'eturna': lim1[2], 'tgdi': lim2[2]},
+                'day4': {'nova': 0, 'cng': 0, 'eturna': lim1[3], 'tgdi': lim2[3]},
+            },
+            'colors': color_counts,
+            'vc_lists': vc_lists
+        }
+    
+    from openpyxl.styles import PatternFill
+    fills = {
+        'light_green': PatternFill(start_color='E2EFDA', end_color='E2EFDA', fill_type='solid'),
+        'light_blue': PatternFill(start_color='DDEBF7', end_color='DDEBF7', fill_type='solid'),
+        'light_yellow': PatternFill(start_color='FFF2CC', end_color='FFF2CC', fill_type='solid'),
+        'light_pink': PatternFill(start_color='FCE4D6', end_color='FCE4D6', fill_type='solid')
+    }
+    
+    # Write Day 1 Sequence
+    for idx, item in enumerate(day1_list):
+        vc, color_key = item
+        row_idx = idx + 3
+        if row_idx <= day1_ws.max_row:
+            day1_ws.cell(row=row_idx, column=2).value = vc
+            desc_val, col_val, svc_val = vc_lookup.get(vc, (None, None, ""))
+            day1_ws.cell(row=row_idx, column=3).value = desc_val
+            day1_ws.cell(row=row_idx, column=4).value = col_val
+            if day1_ws.cell(row=row_idx, column=1).value is None:
+                day1_ws.cell(row=row_idx, column=1).value = idx + 1
+            if color_key in fills:
+                day1_ws.cell(row=row_idx, column=2).fill = fills[color_key]
+                
+    # Write Day 2, Day 3, Day 4 to biw Next 2 days sheet
+    if 'biw Next 2 days' in wb.sheetnames:
+        biw_ws = wb['biw Next 2 days']
+        # Day 2 -> B (2)
+        for idx, item in enumerate(day2_list):
+            vc, color_key = item
+            row_idx = idx + 2
+            if row_idx <= biw_ws.max_row:
+                biw_ws.cell(row=row_idx, column=2).value = vc
+                if biw_ws.cell(row=row_idx, column=1).value is None:
+                    biw_ws.cell(row=row_idx, column=1).value = idx + 1
+                if color_key in fills:
+                    biw_ws.cell(row=row_idx, column=2).fill = fills[color_key]
+        # Day 3 -> C (3)
+        for idx, item in enumerate(day3_list):
+            vc, color_key = item
+            row_idx = idx + 2
+            if row_idx <= biw_ws.max_row:
+                biw_ws.cell(row=row_idx, column=3).value = vc
+                if biw_ws.cell(row=row_idx, column=1).value is None:
+                    biw_ws.cell(row=row_idx, column=1).value = idx + 1
+                if color_key in fills:
+                    biw_ws.cell(row=row_idx, column=3).fill = fills[color_key]
+        # Day 4 -> D (4)
+        for idx, item in enumerate(day4_list):
+            vc, color_key = item
+            row_idx = idx + 2
+            if row_idx <= biw_ws.max_row:
+                biw_ws.cell(row=row_idx, column=4).value = vc
+                if biw_ws.cell(row=row_idx, column=1).value is None:
+                    biw_ws.cell(row=row_idx, column=1).value = idx + 1
+                if color_key in fills:
+                    biw_ws.cell(row=row_idx, column=4).fill = fills[color_key]
     return wb

@@ -528,7 +528,7 @@ with cap_col1:
     
     for idx, (day_num, def_total, def_ev, def_cng) in enumerate([
         ("1", 900, 160, 350),
-        ("2", 900, 160, 200),
+        ("2", 900, 160, 350),
         ("3", 900, 160, 350),
         ("4", 900, 160, 350)
     ]):
@@ -562,10 +562,10 @@ with cap_col2:
     tcf2_tgdi = []
     
     for idx, (day_num, def_total, def_ev, def_tgdi) in enumerate([
-        ("1", 250, 160, 40),
-        ("2", 250, 160, 40),
-        ("3", 250, 160, 40),
-        ("4", 250, 160, 40)
+        ("1", 250, 120, 40),
+        ("2", 250, 120, 40),
+        ("3", 250, 120, 40),
+        ("4", 250, 120, 40)
     ]):
         st.markdown(f"**Day- {day_num}**")
         sc1, sc2, sc3, sc4 = st.columns(4)
@@ -725,6 +725,7 @@ if generate_clicked:
             x1_biw_wip = st.session_state.get("x1_biw_wip")
             
             next_3days_biw_plan = st.session_state.get("next_3days_biw_plan")
+            pending_plan_biw = st.session_state.get("pending_plan_biw")
             
             expected_qty_tcf1 = st.session_state.get("expected_qty_tcf1", 500)
             expected_qty_tcf2 = st.session_state.get("expected_qty_tcf2", 100)
@@ -741,12 +742,13 @@ if generate_clicked:
                 
             tcf1_capacities = st.session_state.get("tcf1_capacities", [900, 900, 900, 900])
             tcf1_ev = st.session_state.get("tcf1_ev", [160, 160, 160, 160])
-            tcf1_cng = st.session_state.get("tcf1_cng", [350, 200, 350, 350])
+            tcf1_cng = st.session_state.get("tcf1_cng", [350, 350, 350, 350])
             tcf1_wb = update_paint_float_data(
                 tcf1_wb, paint_float, "TCF1", 
                 expected_qty=expected_qty_tcf1,
                 wip_files=tcf1_wip_files,
                 yest_plan_file_or_stream=yest_tcf1,
+                pending_plan_biw=pending_plan_biw,
                 next_3days_biw_plan=next_3days_biw_plan,
                 daily_capacities=tcf1_capacities,
                 sub_limits_1=tcf1_ev,
@@ -766,13 +768,14 @@ if generate_clicked:
                 tcf2_wip_files.append(wip_q5)
                 
             tcf2_capacities = st.session_state.get("tcf2_capacities", [250, 250, 250, 250])
-            tcf2_eturna = st.session_state.get("tcf2_eturna", [160, 160, 160, 160])
+            tcf2_eturna = st.session_state.get("tcf2_eturna", [120, 120, 120, 120])
             tcf2_tgdi = st.session_state.get("tcf2_tgdi", [40, 40, 40, 40])
             tcf2_wb = update_paint_float_data(
                 tcf2_wb, paint_float, "TCF2", 
                 expected_qty=expected_qty_tcf2,
                 wip_files=tcf2_wip_files,
                 yest_plan_file_or_stream=yest_tcf2,
+                pending_plan_biw=pending_plan_biw,
                 next_3days_biw_plan=next_3days_biw_plan,
                 daily_capacities=tcf2_capacities,
                 sub_limits_1=tcf2_eturna,
@@ -908,8 +911,8 @@ if st.session_state.get("plans_generated", False):
     )
     
     tcf1_ev = st.session_state.get("tcf1_ev", [160, 90, 160, 150])
-    tcf1_cng = st.session_state.get("tcf1_cng", [350, 200, 350, 350])
-    tcf2_eturna = st.session_state.get("tcf2_eturna", [160, 160, 160, 160])
+    tcf1_cng = st.session_state.get("tcf1_cng", [350, 350, 350, 350])
+    tcf2_eturna = st.session_state.get("tcf2_eturna", [120, 120, 120, 120])
     tcf2_tgdi = st.session_state.get("tcf2_tgdi", [40, 40, 40, 40])
 
     sum_col1, sum_col2, sum_col3, sum_col4 = st.columns(4, gap="large")
