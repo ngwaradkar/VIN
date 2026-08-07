@@ -3,6 +3,19 @@ import openpyxl
 import io
 import os
 
+def is_valid_vc(vc_str):
+    if not vc_str:
+        return False
+    vc_u = str(vc_str).strip().upper()
+    invalid_keywords = ['COLUMN LABELS', 'ROW LABELS', 'GRAND TOTAL', 'COUNT OF', 'SUM OF', '(BLANK)', 'TOTAL', 'BATCH', 'LABEL', 'COLOUR', 'COLOR']
+    if any(kw in vc_u for kw in invalid_keywords):
+        return False
+    if vc_u.isdigit() and len(vc_u) < 8:
+        return False
+    if len(vc_u) < 4:
+        return False
+    return True
+
 def parse_html_wip_vcs(file_like_or_path):
     """
     Parses HTML-based tables or Excel-based WIP files dynamically
@@ -598,10 +611,11 @@ def extract_vcs_from_file(file_or_stream, track, vc_lookup, default_color='light
                     val = ws.cell(row=r, column=col_idx).value
                     if val is not None and str(val).strip() != '':
                         vc_str = str(val).strip().upper()
-                        vcs.append((vc_str, default_color))
+                        if is_valid_vc(vc_str):
+                            vcs.append((vc_str, default_color))
         else:
             if track == 'TCF1':
-                target_sheets = ['Punch Seq', 'NOVA', 'Sheet1', 'Sheet2', 'Punch Summary']
+                target_sheets = ['Punch Seq', 'NOVA', 'Sheet1', 'Sheet2']
             else:
                 target_sheets = ['Q5', 'TGDI ', 'Eturna']
             
@@ -631,7 +645,7 @@ def extract_vcs_from_file(file_or_stream, track, vc_lookup, default_color='light
                     val = ws.cell(row=r, column=vc_col_idx).value
                     if val is not None:
                         vc_str = str(val).strip().upper()
-                        if vc_str != '':
+                        if is_valid_vc(vc_str):
                             if line_col_idx is not None:
                                 line_val = str(ws.cell(row=r, column=line_col_idx).value or '').strip().upper()
                                 if line_val:
@@ -697,7 +711,7 @@ def extract_vcs_from_file(file_or_stream, track, vc_lookup, default_color='light
                     if pd.isna(val):
                         continue
                     vc_str = str(val).strip().upper()
-                    if vc_str != '':
+                    if is_valid_vc(vc_str):
                         if line_col is not None and pd.notna(row[line_col]):
                             line_val = str(row[line_col]).strip().upper()
                             if line_val:
