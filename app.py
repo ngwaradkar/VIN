@@ -291,11 +291,100 @@ TOTAL_FILES = len(FILE_KEYS)
 
 
 # ─────────────────────────────────────────────
-# HELPER: upload widget wrapped in styled card
+# FILE DETECTION & RESOLUTION HELPERS
 # ─────────────────────────────────────────────
+import re
+
+def detect_file_type(filename: str):
+    """
+    Classifies a filename into one of the 10 target categories regardless
+    of date, month, year, or timestamp variations in the filename.
+    """
+    if not filename:
+        return None
+    fn = filename.upper().strip()
+    # Normalize separators (underscores, hyphens, periods, extra spaces) to single spaces
+    fn_norm = re.sub(r'[^A-Z0-9]+', ' ', fn)
+    
+    # 1. Paint Float Report (PPC Float Report...)
+    if ('PPC' in fn_norm and ('FLOAT' in fn_norm or 'REPORT' in fn_norm)) or ('PAINT' in fn_norm and 'FLOAT' in fn_norm):
+        return 'paint_float_report'
+        
+    # 2. Q5 WIP
+    if 'Q5' in fn_norm and ('WIP' in fn_norm or 'FLOAT' in fn_norm):
+        return 'wip_q5'
+        
+    # 3. Nova WIP
+    if 'NOVA' in fn_norm and ('WIP' in fn_norm or 'FLOAT' in fn_norm):
+        return 'nova_wip'
+        
+    # 4. X1 / X451 WIP
+    if ('X451' in fn_norm or 'X1' in fn_norm) and ('WIP' in fn_norm or 'FLOAT' in fn_norm or 'BIW' in fn_norm):
+        return 'x1_biw_wip'
+        
+    # 5. Pending Plan for BIW
+    if 'PENDING' in fn_norm and ('BIW' in fn_norm or 'PLAN' in fn_norm):
+        return 'pending_plan_biw'
+        
+    # 6. Next 3-Days BIW Plan (e.g. BIW Plan 3 days declaration..., Next 3 days BIW...)
+    has_3day_kw = any(k in fn_norm for k in ['3 DAYS', '3DAYS', '3 DAY', '3DAY', 'NEXT 3', 'NEXT 2', 'DECLARATION'])
+    has_biw_kw = ('BIW' in fn_norm or 'PLAN' in fn_norm)
+    if has_3day_kw and has_biw_kw and 'PENDING' not in fn_norm:
+        return 'next_3days_biw_plan'
+        
+    # 7 & 8: Today's VIN Generation Lists
+    is_list = ('VEHICLE GENERATION LIST' in fn_norm or 'GENERATION LIST' in fn_norm or 'VIN LIST' in fn_norm or ('VEHICLE' in fn_norm and 'LIST' in fn_norm) or ('VEHICLE' in fn_norm and 'GENERATION' in fn_norm))
+    if is_list:
+        if 'TCF2' in fn_norm or 'TCF 2' in fn_norm:
+            return 'vin_list_tcf2_today'
+        else:
+            return 'vin_list_tcf1_today'
+            
+    # 9 & 10: Yesterday's VIN Generation Plans
+    is_plan = ('VIN GENERATION PLAN' in fn_norm or 'VIN PLAN' in fn_norm or 'GENERATION PLAN' in fn_norm or ('VIN' in fn_norm and 'PLAN' in fn_norm))
+    if is_plan:
+        if 'TCF2' in fn_norm or 'TCF 2' in fn_norm:
+            return 'vin_plan_tcf2_yesterday'
+        elif 'TCF1' in fn_norm or 'TCF 1' in fn_norm:
+            return 'vin_plan_tcf1_yesterday'
+            
+    return None
+
+def get_active_file(key: str):
+    """
+    Returns the active uploaded file for a given category key:
+    Prioritizes manual individual upload slot, falling back to bulk auto-detected file.
+    """
+    manual = st.session_state.get(key)
+    if manual is not None and getattr(manual, 'name', None):
+        return manual
+    detected = st.session_state.get("bulk_detected_files", {})
+    if key in detected and detected[key] is not None:
+        return detected[key]
+    return None
+
 def upload_card(label: str, key: str, icon: str = "📄") -> object:
-    """Renders a cohesive styled upload widget."""
-    st.file_uploader(
+    """Renders a cohesive styled upload widget with auto-detection awareness."""
+    active_f = get_active_file(key)
+    if active_f is not None:
+        is_manual = (active_f == st.session_state.get(key))
+        badge_text = "Manual Override" if is_manual else "Auto-Detected (Bulk)"
+        badge_bg = "rgba(59, 130, 246, 0.18)" if is_manual else "rgba(16, 185, 129, 0.18)"
+        badge_color = "#93c5fd" if is_manual else "#6ee7b7"
+        st.markdown(
+            f"""
+            <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:6px 12px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+                <span style="font-size:0.8rem; color:#e2e8f0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                    📁 <strong>{active_f.name}</strong>
+                </span>
+                <span style="font-size:0.7rem; color:{badge_color}; background:{badge_bg}; padding:2px 8px; border-radius:10px; font-weight:600; white-space:nowrap;">
+                    {badge_text}
+                </span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    return st.file_uploader(
         label=f"{icon}  {label}",
         type=["csv", "xlsx", "xls", "xlsb"],
         key=key,
@@ -335,14 +424,135 @@ st.markdown(
 )
 
 
+# ─────────────────────────────────────────────
+# BULK FILE UPLOAD & AUTO-DETECTION
+# ─────────────────────────────────────────────
+if "uploader_version" not in st.session_state:
+    st.session_state["uploader_version"] = 0
 
+bulk_key = f"bulk_file_uploader_{st.session_state['uploader_version']}"
+
+st.markdown(
+    """
+    <div style="background: radial-gradient(circle at top left, rgba(56, 189, 248, 0.1), transparent 60%), rgba(255, 255, 255, 0.02);
+                border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 16px; padding: 1.5rem; margin-bottom: 1.5rem;
+                box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 0.8rem; flex-wrap:wrap; gap:10px;">
+            <div style="display:flex; align-items:center; gap:12px;">
+                <span style="font-size: 1.6rem;">⚡</span>
+                <div>
+                    <h3 style="margin:0; font-size:1.25rem; font-weight:700; color:#f8fafc;">
+                        Bulk File Upload &amp; Automatic Name Detection
+                    </h3>
+                    <p style="margin:0; font-size:0.82rem; color:#94a3b8;">
+                        Drag and drop all 10 planning and float files at once — names are automatically identified regardless of date or month.
+                    </p>
+                </div>
+            </div>
+        </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+bulk_files = st.file_uploader(
+    "Drop all 10 files together here (or click to browse)",
+    type=["csv", "xlsx", "xls", "xlsb"],
+    accept_multiple_files=True,
+    key=bulk_key,
+    help="Upload all required planning, float, and WIP files simultaneously. The engine will automatically classify each file."
+)
+
+if "bulk_detected_files" not in st.session_state:
+    st.session_state["bulk_detected_files"] = {}
+
+if bulk_files:
+    detected_mapping = {}
+    unrecognized = []
+    
+    for f in bulk_files:
+        override_val = st.session_state.get(f"override_{f.name}")
+        if override_val and override_val in FILE_LABELS:
+            detected_mapping[override_val] = f
+        else:
+            cat = detect_file_type(f.name)
+            if cat:
+                detected_mapping[cat] = f
+            else:
+                unrecognized.append(f)
+                
+    st.session_state["bulk_detected_files"] = detected_mapping
+
+    # Render mapping review table
+    st.markdown("<h4 style='color:#38bdf8; font-size:1rem; margin-top:1rem; margin-bottom:0.5rem;'>🎯 Auto-Detection &amp; Mapping Results</h4>", unsafe_allow_html=True)
+    
+    head_col1, head_col2, head_col3 = st.columns([3, 3, 2])
+    with head_col1:
+        st.markdown("<span style='font-size:0.75rem; color:#94a3b8; font-weight:700; text-transform:uppercase;'>Uploaded File</span>", unsafe_allow_html=True)
+    with head_col2:
+        st.markdown("<span style='font-size:0.75rem; color:#94a3b8; font-weight:700; text-transform:uppercase;'>Auto-Detected Category</span>", unsafe_allow_html=True)
+    with head_col3:
+        st.markdown("<span style='font-size:0.75rem; color:#94a3b8; font-weight:700; text-transform:uppercase;'>Override Category</span>", unsafe_allow_html=True)
+        
+    for f in bulk_files:
+        matched_cat = None
+        for cat_k, file_obj in st.session_state["bulk_detected_files"].items():
+            if file_obj.name == f.name:
+                matched_cat = cat_k
+                break
+                
+        r_c1, r_c2, r_c3 = st.columns([3, 3, 2])
+        with r_c1:
+            st.markdown(f"<div style='font-size:0.85rem; color:#f1f5f9; padding:6px 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;' title='{f.name}'>📄 {f.name}</div>", unsafe_allow_html=True)
+        with r_c2:
+            if matched_cat:
+                st.markdown(f"<div style='padding:4px 0;'><span style='font-size:0.8rem; color:#6ee7b7; background:rgba(16,185,129,0.15); padding:3px 10px; border-radius:12px; border:1px solid rgba(16,185,129,0.3); font-weight:600;'>✓ {FILE_LABELS[matched_cat]}</span></div>", unsafe_allow_html=True)
+            else:
+                st.markdown("<div style='padding:4px 0;'><span style='font-size:0.8rem; color:#f87171; background:rgba(239,68,68,0.15); padding:3px 10px; border-radius:12px; border:1px solid rgba(239,68,68,0.3); font-weight:600;'>⚠️ Unrecognized</span></div>", unsafe_allow_html=True)
+        with r_c3:
+            options = ["(Auto-detect)"] + list(FILE_LABELS.keys())
+            curr_index = 0
+            if st.session_state.get(f"override_{f.name}"):
+                curr_index = options.index(st.session_state[f"override_{f.name}"])
+            elif matched_cat:
+                curr_index = options.index(matched_cat)
+                
+            chosen = st.selectbox(
+                "Override Category",
+                options=options,
+                index=curr_index,
+                format_func=lambda x: "(Auto-detect)" if x == "(Auto-detect)" else FILE_LABELS[x],
+                key=f"select_override_{f.name}",
+                label_visibility="collapsed"
+            )
+            if chosen != "(Auto-detect)" and chosen != matched_cat:
+                st.session_state[f"override_{f.name}"] = chosen
+                st.session_state["bulk_detected_files"][chosen] = f
+                st.rerun()
+            elif chosen == "(Auto-detect)" and st.session_state.get(f"override_{f.name}"):
+                del st.session_state[f"override_{f.name}"]
+                st.rerun()
+
+    # Clear button
+    c_col1, c_col2 = st.columns([5, 1])
+    with c_col2:
+        if st.button("🗑️ Clear Bulk", key="btn_clear_bulk", use_container_width=True):
+            st.session_state["bulk_detected_files"] = {}
+            st.session_state["uploader_version"] += 1
+            for k in list(st.session_state.keys()):
+                if k.startswith("override_"):
+                    del st.session_state[k]
+            st.rerun()
+else:
+    st.session_state["bulk_detected_files"] = {}
+
+st.markdown("</div>", unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────
 # LIVE UPLOAD PROGRESS
 # ─────────────────────────────────────────────
 uploaded_count = sum(
-    1 for k in FILE_KEYS if st.session_state.get(k) not in (None, [])
+    1 for k in FILE_KEYS if get_active_file(k) is not None
 )
 pct = int((uploaded_count / TOTAL_FILES) * 100)
 
@@ -355,7 +565,7 @@ with col_prog_1:
                     border:1px solid rgba(255,255,255,0.08); border-radius:12px;
                     padding: 1rem 0.5rem;">
             <div style="font-size:2.2rem;font-weight:800;color:#63b3ed;">{uploaded_count}/{TOTAL_FILES}</div>
-            <div style="font-size:0.75rem;color:#718096;margin-top:4px;">Files Uploaded</div>
+            <div style="font-size:0.75rem;color:#718096;margin-top:4px;">Files Ready</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -363,10 +573,10 @@ with col_prog_1:
 
 with col_prog_2:
     st.progress(pct / 100, text=f"Upload Progress — {pct}% complete")
-    # Mini status checklist (2 rows for readability with 9 files)
+    # Mini status checklist (2 rows for readability with 10 files)
     status_html = ""
     for k, label in FILE_LABELS.items():
-        dot_cls = "uploaded" if st.session_state.get(k) not in (None, []) else "pending"
+        dot_cls = "uploaded" if get_active_file(k) is not None else "pending"
         status_html += (
             f'<span style="margin-right:14px;font-size:0.75rem;color:#a0aec0;">'
             f'<span class="status-dot {dot_cls}"></span>{label}</span>'
@@ -378,42 +588,95 @@ with col_prog_2:
 
 
 # ─────────────────────────────────────────────
-# DIVIDER
+# INDIVIDUAL FILE UPLOADERS & OVERRIDES (COLLAPSIBLE)
 # ─────────────────────────────────────────────
 st.markdown('<div class="styled-divider"></div>', unsafe_allow_html=True)
 
-
-# ─────────────────────────────────────────────
-# GROUP 1 — YESTERDAY'S PLANS
-# ─────────────────────────────────────────────
-st.markdown(
-    """
-    <div class="section-header">
-        <div class="section-icon" style="background:rgba(66,153,225,0.15);">📋</div>
-        <div>
-            <p class="section-title">Group 1 — Yesterday's VIN Generation Plans</p>
-            <p class="section-subtitle">Baseline plans from the previous production day for TCF 1 &amp; TCF 2</p>
+with st.expander("📂 Individual File Uploaders (Manual Upload & Single File Overrides)", expanded=(uploaded_count == 0)):
+    # GROUP 1
+    st.markdown(
+        """
+        <div class="section-header">
+            <div class="section-icon" style="background:rgba(66,153,225,0.15);">📋</div>
+            <div>
+                <p class="section-title">Group 1 — Yesterday's VIN Generation Plans</p>
+                <p class="section-subtitle">Baseline plans from the previous production day for TCF 1 &amp; TCF 2</p>
+            </div>
         </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-g1_col1, g1_col2 = st.columns(2, gap="large")
-
-with g1_col1:
-    upload_card(
-        "Yesterday's VIN Generation Plan — TCF 1",
-        key="vin_plan_tcf1_yesterday",
-        icon="📄",
+        """,
+        unsafe_allow_html=True,
     )
+    g1_col1, g1_col2 = st.columns(2, gap="large")
+    with g1_col1:
+        upload_card(
+            "Yesterday's VIN Generation Plan — TCF 1",
+            key="vin_plan_tcf1_yesterday",
+            icon="📄",
+        )
+    with g1_col2:
+        upload_card(
+            "Yesterday's VIN Generation Plan — TCF 2",
+            key="vin_plan_tcf2_yesterday",
+            icon="📄",
+        )
 
-with g1_col2:
-    upload_card(
-        "Yesterday's VIN Generation Plan — TCF 2",
-        key="vin_plan_tcf2_yesterday",
-        icon="📄",
+    # GROUP 2
+    st.markdown(
+        """
+        <div class="section-header">
+            <div class="section-icon" style="background:rgba(72,187,120,0.15);">📝</div>
+            <div>
+                <p class="section-title">Group 2 — Today's VIN Generation Lists</p>
+                <p class="section-subtitle">Current-day VIN lists for TCF 1 &amp; TCF 2 production tracks</p>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
+    g2_col1, g2_col2 = st.columns(2, gap="large")
+    with g2_col1:
+        upload_card(
+            "Today's TCF 1 VIN Generation List",
+            key="vin_list_tcf1_today",
+            icon="📝",
+        )
+    with g2_col2:
+        upload_card(
+            "Today's TCF 2 VIN Generation List",
+            key="vin_list_tcf2_today",
+            icon="📝",
+        )
+
+    # GROUP 3
+    st.markdown(
+        """
+        <div class="section-header">
+            <div class="section-icon" style="background:rgba(237,137,54,0.15);">📊</div>
+            <div>
+                <p class="section-title">Group 3 — Reports &amp; Work-In-Progress Data</p>
+                <p class="section-subtitle">Paint float, WIP trackers, BIW plan data and stage-wise reports</p>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    g3_row1_col1, g3_row1_col2 = st.columns(2, gap="large")
+    with g3_row1_col1:
+        upload_card("Paint Float Report", key="paint_float_report", icon="🎨")
+    with g3_row1_col2:
+        upload_card("WIP — Q5", key="wip_q5", icon="📈")
+
+    g3_row2_col1, g3_row2_col2 = st.columns(2, gap="large")
+    with g3_row2_col1:
+        upload_card("Nova — WIP", key="nova_wip", icon="🔧")
+    with g3_row2_col2:
+        upload_card("Pending Plan for BIW", key="pending_plan_biw", icon="🏗️")
+
+    g3_row3_col1, g3_row3_col2 = st.columns(2, gap="large")
+    with g3_row3_col1:
+        upload_card("X1 BIW WIP", key="x1_biw_wip", icon="🏭")
+    with g3_row3_col2:
+        upload_card("Next 3-Days BIW Plan", key="next_3days_biw_plan", icon="📋")
 
 
 # ─────────────────────────────────────────────
@@ -478,7 +741,7 @@ st.markdown(
 
 # Dynamically calculate planning dates
 baseline_date = None
-yest_tcf1 = st.session_state.get("vin_plan_tcf1_yesterday")
+yest_tcf1 = get_active_file("vin_plan_tcf1_yesterday")
 if yest_tcf1 is not None:
     try:
         import io
@@ -591,103 +854,6 @@ with cap_col2:
 
 st.markdown('<div class="styled-divider"></div>', unsafe_allow_html=True)
 
-
-# ─────────────────────────────────────────────
-# GROUP 2 — TODAY'S LISTS
-# ─────────────────────────────────────────────
-st.markdown('<div class="styled-divider"></div>', unsafe_allow_html=True)
-st.markdown(
-    """
-    <div class="section-header">
-        <div class="section-icon" style="background:rgba(72,187,120,0.15);">📝</div>
-        <div>
-            <p class="section-title">Group 2 — Today's VIN Generation Lists</p>
-            <p class="section-subtitle">Current-day VIN lists for TCF 1 &amp; TCF 2 production tracks</p>
-        </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-g2_col1, g2_col2 = st.columns(2, gap="large")
-
-with g2_col1:
-    upload_card(
-        "Today's TCF 1 VIN Generation List",
-        key="vin_list_tcf1_today",
-        icon="📝",
-    )
-
-with g2_col2:
-    upload_card(
-        "Today's TCF 2 VIN Generation List",
-        key="vin_list_tcf2_today",
-        icon="📝",
-    )
-
-
-# ─────────────────────────────────────────────
-# GROUP 3 — REPORTS & WIP
-# ─────────────────────────────────────────────
-st.markdown('<div class="styled-divider"></div>', unsafe_allow_html=True)
-st.markdown(
-    """
-    <div class="section-header">
-        <div class="section-icon" style="background:rgba(237,137,54,0.15);">📊</div>
-        <div>
-            <p class="section-title">Group 3 — Reports &amp; Work-In-Progress Data</p>
-            <p class="section-subtitle">Paint float, WIP trackers, BIW plan data and stage-wise reports</p>
-        </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-g3_row1_col1, g3_row1_col2 = st.columns(2, gap="large")
-with g3_row1_col1:
-    upload_card(
-        "Paint Float Report",
-        key="paint_float_report",
-        icon="🎨",
-    )
-with g3_row1_col2:
-    upload_card(
-        "WIP — Q5",
-        key="wip_q5",
-        icon="📈",
-    )
-
-g3_row2_col1, g3_row2_col2 = st.columns(2, gap="large")
-with g3_row2_col1:
-    upload_card(
-        "Nova — WIP",
-        key="nova_wip",
-        icon="🔧",
-    )
-with g3_row2_col2:
-    upload_card(
-        "Pending Plan for BIW",
-        key="pending_plan_biw",
-        icon="🏗️",
-    )
-
-g3_row3_col1, g3_row3_col2 = st.columns(2, gap="large")
-with g3_row3_col1:
-    upload_card(
-        "X1 BIW WIP",
-        key="x1_biw_wip",
-        icon="🏭",
-    )
-with g3_row3_col2:
-    upload_card(
-        "Next 3-Days BIW Plan",
-        key="next_3days_biw_plan",
-        icon="📋",
-    )
-
-
-
-
 btn_col1, btn_col2, btn_col3 = st.columns([1, 2, 1])
 with btn_col2:
     generate_clicked = st.button(
@@ -702,7 +868,7 @@ if generate_clicked:
     missing = [
         FILE_LABELS[k]
         for k in required_keys
-        if st.session_state.get(k) in (None, [])
+        if get_active_file(k) is None
     ]
     if missing:
         missing_list = "\n".join(f"- {m}" for m in missing)
@@ -715,17 +881,17 @@ if generate_clicked:
         try:
             import io
             
-            yest_tcf1 = st.session_state.get("vin_plan_tcf1_yesterday")
-            yest_tcf2 = st.session_state.get("vin_plan_tcf2_yesterday")
-            today_list_tcf1 = st.session_state.get("vin_list_tcf1_today")
-            today_list_tcf2 = st.session_state.get("vin_list_tcf2_today")
-            paint_float = st.session_state.get("paint_float_report")
-            wip_q5 = st.session_state.get("wip_q5")
-            nova_wip = st.session_state.get("nova_wip")
-            x1_biw_wip = st.session_state.get("x1_biw_wip")
+            yest_tcf1 = get_active_file("vin_plan_tcf1_yesterday")
+            yest_tcf2 = get_active_file("vin_plan_tcf2_yesterday")
+            today_list_tcf1 = get_active_file("vin_list_tcf1_today")
+            today_list_tcf2 = get_active_file("vin_list_tcf2_today")
+            paint_float = get_active_file("paint_float_report")
+            wip_q5 = get_active_file("wip_q5")
+            nova_wip = get_active_file("nova_wip")
+            x1_biw_wip = get_active_file("x1_biw_wip")
             
-            next_3days_biw_plan = st.session_state.get("next_3days_biw_plan")
-            pending_plan_biw = st.session_state.get("pending_plan_biw")
+            next_3days_biw_plan = get_active_file("next_3days_biw_plan")
+            pending_plan_biw = get_active_file("pending_plan_biw")
             
             expected_qty_tcf1 = st.session_state.get("expected_qty_tcf1", 500)
             expected_qty_tcf2 = st.session_state.get("expected_qty_tcf2", 100)
