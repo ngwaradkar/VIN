@@ -1123,19 +1123,19 @@ def update_paint_float_data(wb, paint_float_file_or_stream, track, expected_qty=
     
     is_tcf1 = (track == 'TCF1')
     if daily_capacities is None:
-        caps = [900, 900, 900] if is_tcf1 else [250, 250, 250]
+        caps = [900, 900, 900] if is_tcf1 else [300, 300, 300]
     else:
         caps = list(daily_capacities)[:3]
         expected_len = 3
         while len(caps) < expected_len:
-            caps.append(900 if is_tcf1 else 250)
+            caps.append(900 if is_tcf1 else 300)
             
     if sub_limits_1 is None:
-        lim1 = [160, 160, 160] if is_tcf1 else [120, 120, 120]
+        lim1 = [220, 220, 220] if is_tcf1 else [100, 100, 100]
     else:
         lim1 = list(sub_limits_1)[:3]
         expected_len = 3
-        def_lim1 = 160 if is_tcf1 else 120
+        def_lim1 = 220 if is_tcf1 else 100
         while len(lim1) < expected_len:
             lim1.append(def_lim1)
             

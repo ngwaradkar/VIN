@@ -912,9 +912,9 @@ with cap_col1:
     tcf1_cng = []
     
     for idx, (day_num, def_total, def_ev, def_cng) in enumerate([
-        ("1", 900, 160, 350),
-        ("2", 900, 160, 350),
-        ("3", 900, 160, 350)
+        ("1", 900, 220, 350),
+        ("2", 900, 220, 350),
+        ("3", 900, 220, 350)
     ]):
         st.markdown(f"<div style='margin-top:0.8rem; margin-bottom:0.3rem;'><span class='glass-pill' style='padding:2px 12px; font-size:0.75rem; color:#e2e8f0; font-weight:600;'>Day {day_num}</span></div>", unsafe_allow_html=True)
         sc1, sc2, sc3, sc4 = st.columns(4)
@@ -954,9 +954,9 @@ with cap_col2:
     tcf2_tgdi = []
     
     for idx, (day_num, def_total, def_ev, def_tgdi) in enumerate([
-        ("1", 250, 120, 40),
-        ("2", 250, 120, 40),
-        ("3", 250, 120, 40)
+        ("1", 300, 100, 40),
+        ("2", 300, 100, 40),
+        ("3", 300, 100, 40)
     ]):
         st.markdown(f"<div style='margin-top:0.8rem; margin-bottom:0.3rem;'><span class='glass-pill' style='padding:2px 12px; font-size:0.75rem; color:#e2e8f0; font-weight:600;'>Day {day_num}</span></div>", unsafe_allow_html=True)
         sc1, sc2, sc3, sc4 = st.columns(4)
@@ -1035,7 +1035,7 @@ if generate_clicked:
                 tcf1_wip_files.append(x1_biw_wip)
                 
             tcf1_capacities = st.session_state.get("tcf1_capacities", [900, 900, 900])
-            tcf1_ev = st.session_state.get("tcf1_ev", [160, 160, 160])
+            tcf1_ev = st.session_state.get("tcf1_ev", [220, 220, 220])
             tcf1_cng = st.session_state.get("tcf1_cng", [350, 350, 350])
             tcf1_wb = update_paint_float_data(
                 tcf1_wb, paint_float, "TCF1", 
@@ -1061,8 +1061,8 @@ if generate_clicked:
             if wip_q5 is not None:
                 tcf2_wip_files.append(wip_q5)
                 
-            tcf2_capacities = st.session_state.get("tcf2_capacities", [250, 250, 250])
-            tcf2_eturna = st.session_state.get("tcf2_eturna", [120, 120, 120])
+            tcf2_capacities = st.session_state.get("tcf2_capacities", [300, 300, 300])
+            tcf2_eturna = st.session_state.get("tcf2_eturna", [100, 100, 100])
             tcf2_tgdi = st.session_state.get("tcf2_tgdi", [40, 40, 40])
             tcf2_wb = update_paint_float_data(
                 tcf2_wb, paint_float, "TCF2", 
@@ -1096,7 +1096,7 @@ if generate_clicked:
 if st.session_state.get("plans_generated", False):
     
     tcf1_caps = st.session_state.get("tcf1_capacities", [900, 900, 900])
-    tcf2_caps = st.session_state.get("tcf2_capacities", [250, 250, 250])
+    tcf2_caps = st.session_state.get("tcf2_capacities", [300, 300, 300])
     tcf1_cap_strs = [f"{cap} (Holiday)" if cap == 0 else str(cap) for cap in tcf1_caps]
     tcf2_cap_strs = [f"{cap} (Holiday)" if cap == 0 else str(cap) for cap in tcf2_caps]
     
@@ -1204,9 +1204,9 @@ if st.session_state.get("plans_generated", False):
         unsafe_allow_html=True,
     )
     
-    tcf1_ev = st.session_state.get("tcf1_ev", [160, 90, 160])
+    tcf1_ev = st.session_state.get("tcf1_ev", [220, 220, 220])
     tcf1_cng = st.session_state.get("tcf1_cng", [350, 350, 350])
-    tcf2_eturna = st.session_state.get("tcf2_eturna", [120, 120, 120])
+    tcf2_eturna = st.session_state.get("tcf2_eturna", [100, 100, 100])
     tcf2_tgdi = st.session_state.get("tcf2_tgdi", [40, 40, 40])
 
     sum_col1, sum_col2, sum_col3, sum_col4 = st.columns(4, gap="large")
@@ -1353,7 +1353,7 @@ if st.session_state.get("plans_generated", False):
     for day_key, day_name in [('day1', 'Day 1 (Today)'), ('day2', 'Day 2'), ('day3', 'Day 3')]:
         t_val = t2_targets.get(day_key, {})
         p_val = t2.get(day_key, {})
-        day_cap = st.session_state.get("tcf2_capacities", [250, 250, 250])[int(day_key[-1]) - 1]
+        day_cap = st.session_state.get("tcf2_capacities", [300, 300, 300])[int(day_key[-1]) - 1]
         if day_cap > 0:
             for variant, label in [('eturna', 'Eturna EV'), ('tgdi', 'TGDI Petrol')]:
                 target = t_val.get(variant, 0)
