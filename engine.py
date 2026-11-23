@@ -400,7 +400,7 @@ def update_today_vin_generation(wb, vin_list_file_or_stream, track):
                 filename = getattr(vin_list_file_or_stream, 'name', '').lower()
                 if filename.endswith('.xlsb'):
                     df = pd.read_excel(io.BytesIO(content), engine='pyxlsb')
-                elif filename.endswith(('.xlsx', '.xls')):
+                elif filename.endswith(('.xlsx', '.xls', '.xlsm')):
                     try:
                         df = pd.read_excel(io.BytesIO(content))
                     except Exception:
@@ -427,7 +427,7 @@ def update_today_vin_generation(wb, vin_list_file_or_stream, track):
                 filename = str(vin_list_file_or_stream).lower()
                 if filename.endswith('.xlsb'):
                     df = pd.read_excel(vin_list_file_or_stream, engine='pyxlsb')
-                elif filename.endswith(('.xlsx', '.xls')):
+                elif filename.endswith(('.xlsx', '.xls', '.xlsm')):
                     try:
                         df = pd.read_excel(vin_list_file_or_stream)
                     except Exception:
@@ -774,7 +774,7 @@ def update_paint_float_data(wb, paint_float_file_or_stream, track, expected_qty=
                 filename = getattr(paint_float_file_or_stream, 'name', '').lower()
                 if filename.endswith('.xlsb'):
                     df = pd.read_excel(io.BytesIO(content), engine='pyxlsb')
-                elif filename.endswith(('.xlsx', '.xls')):
+                elif filename.endswith(('.xlsx', '.xls', '.xlsm')):
                     try:
                         df = pd.read_excel(io.BytesIO(content))
                     except Exception:
@@ -799,7 +799,7 @@ def update_paint_float_data(wb, paint_float_file_or_stream, track, expected_qty=
                 filename = str(paint_float_file_or_stream).lower()
                 if filename.endswith('.xlsb'):
                     df = pd.read_excel(paint_float_file_or_stream, engine='pyxlsb')
-                elif filename.endswith(('.xlsx', '.xls')):
+                elif filename.endswith(('.xlsx', '.xls', '.xlsm')):
                     try:
                         df = pd.read_excel(paint_float_file_or_stream)
                     except Exception:

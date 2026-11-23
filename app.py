@@ -328,7 +328,7 @@ def detect_file_type(filename: str):
         
     # 6. Next 3-Days BIW Plan (e.g. BIW Plan 3 days declaration..., Next 3 days BIW...)
     has_3day_kw = any(k in fn_norm for k in ['3 DAYS', '3DAYS', '3 DAY', '3DAY', 'NEXT 3', 'NEXT 2', 'DECLARATION'])
-    has_biw_kw = ('BIW' in fn_norm or 'PLAN' in fn_norm)
+    has_biw_kw = ('BIW' in fn_norm or 'PLAN' in fn_norm or 'DECLARATION' in fn_norm)
     if has_3day_kw and has_biw_kw and 'PENDING' not in fn_norm:
         return 'next_3days_biw_plan'
         
@@ -386,7 +386,7 @@ def upload_card(label: str, key: str, icon: str = "📄") -> object:
         )
     return st.file_uploader(
         label=f"{icon}  {label}",
-        type=["csv", "xlsx", "xls", "xlsb"],
+        type=["csv", "xlsx", "xls", "xlsb", "xlsm"],
         key=key,
     )
 
@@ -456,7 +456,7 @@ st.markdown(
 
 bulk_files = st.file_uploader(
     "Drop all 10 files together here (or click to browse)",
-    type=["csv", "xlsx", "xls", "xlsb"],
+    type=["csv", "xlsx", "xls", "xlsb", "xlsm"],
     accept_multiple_files=True,
     key=bulk_key,
     help="Upload all required planning, float, and WIP files simultaneously. The engine will automatically classify each file."
