@@ -2,16 +2,7 @@
 import streamlit as st
 import base64
 import os
-import re
-import datetime
-import io
-import openpyxl
-from engine import (
-    initialize_tcf1_workbook,
-    initialize_tcf2_workbook,
-    update_today_vin_generation,
-    update_paint_float_data
-)
+from engine import initialize_tcf1_workbook, initialize_tcf2_workbook, update_today_vin_generation, update_paint_float_data
 
 # Helper to load image to base64
 def get_base64_image(img_path):
@@ -20,450 +11,387 @@ def get_base64_image(img_path):
             return base64.b64encode(image_file.read()).decode()
     return ""
 
+
+
 # ─────────────────────────────────────────────
 # PAGE CONFIG
 # ─────────────────────────────────────────────
 st.set_page_config(
-    page_title="TML VIN Generation & Production Plan",
+    page_title="TML VIN Generation Plan",
     page_icon="🚗",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
 
 # ─────────────────────────────────────────────
-# THEME STATE & CONTROLLER
+# CUSTOM CSS — Glasswork Liquid Glass Dark Theme
 # ─────────────────────────────────────────────
-if "theme" not in st.session_state:
-    st.session_state["theme"] = "light"  # Default to Enterprise Light
+st.markdown(
+    """
+    <style>
+    /* ── Google Font ── */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
-# Top Navigation Bar with Enterprise Branding & Theme Switcher
-nav_col_left, nav_col_right = st.columns([7, 2])
-with nav_col_left:
-    st.markdown(
-        """
-        <div style="display:flex; align-items:center; gap:10px; padding: 4px 0;">
-            <span style="font-weight:800; font-size:1.15rem; color:#002B49; letter-spacing:-0.4px;">
-                TATA MOTORS
-            </span>
-            <span style="height:16px; width:1px; background:#CBD5E1; display:inline-block;"></span>
-            <span style="font-size:0.85rem; font-weight:600; color:#64748B; text-transform:uppercase; letter-spacing:0.06em;">
-                Passenger Vehicles Planning Division
-            </span>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-with nav_col_right:
-    theme_choice = st.segmented_control(
-        "Dashboard Theme",
-        options=["☀️ Enterprise Light", "🌙 Dark Mode"],
-        default="☀️ Enterprise Light" if st.session_state["theme"] == "light" else "🌙 Dark Mode",
-        label_visibility="collapsed",
-        key="app_theme_switcher"
-    )
-    if theme_choice is not None:
-        target_theme = "light" if "Light" in theme_choice else "dark"
-        if target_theme != st.session_state["theme"]:
-            st.session_state["theme"] = target_theme
-            st.rerun()
-
-is_light = (st.session_state.get("theme", "light") == "light")
-
-# ─────────────────────────────────────────────
-# CUSTOM CSS — ENTERPRISE TATA MOTORS SYSTEM
-# ─────────────────────────────────────────────
-if is_light:
-    # ── LIGHT MODE STYLING ──
-    css_theme = """
-    :root {
-        --bg-main: #F5F7FA;
-        --card-bg: #FFFFFF;
-        --card-border: #E2E8F0;
-        --primary-navy: #002B49;
-        --accent-cyan: #0284C7;
-        --text-primary: #0F172A;
-        --text-secondary: #475569;
-        --text-muted: #64748B;
-        --badge-bg: #F1F5F9;
-        --badge-border: #CBD5E1;
-        --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.04);
-        --shadow-md: 0 4px 14px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04);
-        --shadow-lg: 0 10px 25px rgba(15, 23, 42, 0.08), 0 4px 10px rgba(15, 23, 42, 0.04);
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif;
     }
+
+    /* ── Ambient Dark Mesh Wallpaper Background ── */
     .stApp {
-        background-color: var(--bg-main) !important;
-        background: radial-gradient(circle at 10% 10%, rgba(2, 132, 199, 0.035), transparent 45%),
-                    radial-gradient(circle at 90% 90%, rgba(16, 185, 129, 0.03), transparent 45%),
-                    #F5F7FA !important;
-        color: var(--text-primary) !important;
+        background: 
+            radial-gradient(ellipse 80% 50% at 50% -20%, rgba(56, 189, 248, 0.16), transparent 70%),
+            radial-gradient(ellipse 60% 40% at 85% 60%, rgba(16, 185, 129, 0.12), transparent 60%),
+            radial-gradient(ellipse 60% 40% at 15% 85%, rgba(99, 102, 241, 0.14), transparent 60%),
+            linear-gradient(160deg, #090c14 0%, #0e1526 45%, #07090e 100%);
+        background-attachment: fixed;
+        min-height: 100vh;
     }
-    .tml-card {
-        background: var(--card-bg);
-        border: 1px solid var(--card-border);
-        border-radius: 14px;
-        box-shadow: var(--shadow-sm);
-        padding: 1.5rem;
-        margin-bottom: 1.25rem;
-        transition: box-shadow 0.2s ease, border-color 0.2s ease;
+
+    /* ── Glasswork Liquid Glass Core Tokens & Utilities ── */
+    .liquid-glass {
+        background: color-mix(in srgb, rgba(18, 24, 40, 0.58) 80%, transparent);
+        -webkit-backdrop-filter: blur(24px) saturate(190%) brightness(1.08);
+        backdrop-filter: blur(24px) saturate(190%) brightness(1.08);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        box-shadow:
+            inset 1.5px 1.5px 1px -0.5px rgba(255, 255, 255, 0.42),
+            inset -1px -1px 1px -0.5px rgba(255, 255, 255, 0.16),
+            inset 0 0 0 0.5px rgba(255, 255, 255, 0.08),
+            0 12px 36px rgba(0, 0, 0, 0.42),
+            inset 0 6px 10px -6px rgba(255, 255, 255, 0.16),
+            inset 4px 0 8px -6px rgba(255, 255, 255, 0.08),
+            inset -4px 0 8px -6px rgba(255, 255, 255, 0.05),
+            inset 0 -6px 8px -6px rgba(0, 0, 0, 0.28);
+        border-radius: 20px;
+        transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
     }
-    .tml-card:hover {
-        border-color: #CBD5E1;
-        box-shadow: var(--shadow-md);
+
+    .liquid-glass:hover {
+        border-color: rgba(99, 179, 237, 0.4);
+        box-shadow:
+            inset 1.5px 1.5px 1.5px -0.5px rgba(255, 255, 255, 0.55),
+            inset -1px -1px 1px -0.5px rgba(255, 255, 255, 0.22),
+            inset 0 0 0 0.5px rgba(255, 255, 255, 0.14),
+            0 18px 48px rgba(0, 0, 0, 0.5),
+            0 0 24px rgba(56, 189, 248, 0.16);
     }
+
+    /* ── Liquid Glass Pill / Badge ── */
+    .glass-pill {
+        background: color-mix(in srgb, rgba(30, 41, 59, 0.65) 85%, transparent);
+        -webkit-backdrop-filter: blur(14px) saturate(180%);
+        backdrop-filter: blur(14px) saturate(180%);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        box-shadow:
+            inset 1px 1px 0.5px rgba(255, 255, 255, 0.35),
+            inset -1px -1px 0.5px rgba(255, 255, 255, 0.12),
+            0 4px 12px rgba(0, 0, 0, 0.25);
+        border-radius: 9999px;
+        padding: 5px 16px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    /* ── Hero banner Liquid Glass Deck ── */
     .hero-banner {
-        background: #FFFFFF;
-        border: 1px solid #E2E8F0;
-        border-top: 4px solid #002B49;
-        border-radius: 16px;
-        padding: 1.75rem 2rem;
-        margin-bottom: 1.5rem;
-        box-shadow: var(--shadow-md);
+        background: 
+            radial-gradient(circle at 10% 20%, rgba(56, 189, 248, 0.18), transparent 45%), 
+            radial-gradient(circle at 90% 80%, rgba(16, 185, 129, 0.12), transparent 45%),
+            color-mix(in srgb, rgba(15, 23, 42, 0.55) 80%, transparent);
+        -webkit-backdrop-filter: blur(28px) saturate(200%) brightness(1.08);
+        backdrop-filter: blur(28px) saturate(200%) brightness(1.08);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 24px;
+        padding: 3rem;
+        margin-bottom: 2rem;
         position: relative;
+        overflow: hidden;
+        box-shadow:
+            inset 1.5px 1.5px 1px -0.5px rgba(255, 255, 255, 0.45),
+            inset -1.5px -1.5px 1px -0.5px rgba(255, 255, 255, 0.18),
+            inset 0 0 0 0.5px rgba(255, 255, 255, 0.1),
+            0 20px 50px rgba(0, 0, 0, 0.45),
+            inset 0 8px 12px -8px rgba(255, 255, 255, 0.2),
+            inset 0 -8px 12px -8px rgba(0, 0, 0, 0.35);
     }
     .hero-title {
-        font-size: 2.1rem;
+        font-size: 2.9rem;
         font-weight: 800;
-        color: #002B49;
-        margin: 0.35rem 0 0.5rem 0;
-        letter-spacing: -0.6px;
+        background: linear-gradient(135deg, #38BDF8 0%, #60A5FA 40%, #34D399 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin: 0 0 1rem 0;
+        letter-spacing: -1px;
     }
     .hero-badge {
         display: inline-flex;
         align-items: center;
-        gap: 6px;
-        background: #EFF6FF;
-        border: 1px solid #BFDBFE;
+        gap: 8px;
+        background: color-mix(in srgb, rgba(56, 189, 248, 0.15) 85%, transparent);
+        -webkit-backdrop-filter: blur(12px) saturate(180%);
+        backdrop-filter: blur(12px) saturate(180%);
+        border: 1px solid rgba(56, 189, 248, 0.35);
+        box-shadow:
+            inset 1px 1px 0.5px rgba(255, 255, 255, 0.4),
+            inset -1px -1px 0.5px rgba(255, 255, 255, 0.15),
+            0 4px 15px rgba(56, 189, 248, 0.2);
         border-radius: 9999px;
-        padding: 4px 12px;
-        font-size: 0.76rem;
-        font-weight: 700;
-        color: #002B49;
+        padding: 6px 18px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #38BDF8;
+        margin-bottom: 1.2rem;
         text-transform: uppercase;
         letter-spacing: 0.05em;
     }
     .hero-description {
-        font-size: 0.95rem;
-        color: #475569;
-        line-height: 1.55;
-        max-width: 860px;
-        margin: 0;
+        font-size: 1.05rem;
+        color: #e2e8f0;
+        line-height: 1.7;
+        max-width: 820px;
+        margin-bottom: 1.5rem;
+    }
+    .hero-features {
+        display: flex;
+        gap: 2.5rem;
+        flex-wrap: wrap;
+        margin-top: 1.8rem;
     }
     .hero-feature-item {
-        display: inline-flex;
+        display: flex;
         align-items: center;
-        gap: 6px;
-        background: #F8FAFC;
-        border: 1px solid #E2E8F0;
-        border-radius: 8px;
-        padding: 5px 12px;
-        font-size: 0.8rem;
-        color: #334155;
-        font-weight: 600;
+        gap: 8px;
+        font-size: 0.88rem;
+        color: #cbd5e1;
+        font-weight: 500;
+    }
+
+    /* ── Section labels ── */
+    .section-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 2rem 0 1.2rem 0;
+    }
+    .section-icon {
+        width: 38px;
+        height: 38px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.1rem;
+        flex-shrink: 0;
+        background: color-mix(in srgb, rgba(56, 189, 248, 0.15) 80%, transparent);
+        -webkit-backdrop-filter: blur(10px);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(56, 189, 248, 0.25);
+        box-shadow: inset 1px 1px 0.5px rgba(255, 255, 255, 0.3);
     }
     .section-title {
-        font-size: 1.15rem;
+        font-size: 1.05rem;
         font-weight: 700;
-        color: #002B49;
+        color: #f1f5f9;
         margin: 0;
+        letter-spacing: -0.2px;
     }
     .section-subtitle {
         font-size: 0.82rem;
-        color: #64748B;
-        margin-top: 2px;
+        color: #94a3b8;
+        margin: 0;
     }
-    .capacity-panel {
-        background: #FFFFFF;
-        border: 1px solid #E2E8F0;
-        border-radius: 14px;
-        padding: 1.4rem;
-        box-shadow: var(--shadow-sm);
-        height: 100%;
+
+    /* ── Liquid Glass Upload Card Wrapper ── */
+    .upload-card {
+        background: color-mix(in srgb, rgba(20, 26, 42, 0.52) 80%, transparent);
+        -webkit-backdrop-filter: blur(16px) saturate(180%) brightness(1.05);
+        backdrop-filter: blur(16px) saturate(180%) brightness(1.05);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        box-shadow:
+            inset 1.5px 1.5px 1px -0.5px rgba(255, 255, 255, 0.35),
+            inset -1px -1px 1px -0.5px rgba(255, 255, 255, 0.12),
+            inset 0 0 0 0.5px rgba(255, 255, 255, 0.06),
+            0 8px 24px rgba(0, 0, 0, 0.32);
+        border-radius: 16px;
+        padding: 1.2rem 1.4rem;
+        margin-bottom: 0.8rem;
+        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
     }
-    .capacity-day-card {
-        background: #F8FAFC;
-        border: 1px solid #E2E8F0;
-        border-radius: 10px;
-        padding: 1rem 1.1rem;
-        margin-bottom: 0.85rem;
-        transition: border-color 0.2s ease;
+    .upload-card:hover {
+        border-color: rgba(99, 179, 237, 0.4);
+        box-shadow:
+            inset 1.5px 1.5px 1.5px -0.5px rgba(255, 255, 255, 0.48),
+            inset -1px -1px 1px -0.5px rgba(255, 255, 255, 0.18),
+            0 12px 32px rgba(0, 0, 0, 0.4),
+            0 0 18px rgba(56, 189, 248, 0.12);
+        transform: translateY(-1px);
     }
-    .capacity-day-card:hover {
-        border-color: #CBD5E1;
-        background: #FFFFFF;
+    .upload-label {
+        font-size: 0.84rem;
+        font-weight: 600;
+        color: #e2e8f0;
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 6px;
     }
-    div[data-testid="stNumberInput"] input {
-        background: #FFFFFF !important;
-        color: #0F172A !important;
-        border: 1px solid #CBD5E1 !important;
-        border-radius: 8px !important;
-        font-weight: 600 !important;
+    .required-dot {
+        width: 6px;
+        height: 6px;
+        background: #f87171;
+        border-radius: 50%;
+        display: inline-block;
+        flex-shrink: 0;
+        box-shadow: 0 0 8px #f87171;
     }
-    div[data-testid="stNumberInput"] input:focus {
-        border-color: #0284C7 !important;
-        box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.15) !important;
+
+    /* ── Divider ── */
+    .styled-divider {
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(99, 179, 237, 0.35), transparent);
+        margin: 2.2rem 0;
+        border: none;
     }
-    div[data-testid="stFileUploader"] {
-        background: #FFFFFF !important;
-        border: 1px solid #E2E8F0 !important;
+
+    /* ── Liquid Glass Generate Button ── */
+    div[data-testid="stButton"] > button {
+        width: 100%;
+        background: linear-gradient(135deg, rgba(37, 99, 235, 0.85) 0%, rgba(30, 64, 175, 0.90) 100%) !important;
+        -webkit-backdrop-filter: blur(12px) saturate(180%) !important;
+        backdrop-filter: blur(12px) saturate(180%) !important;
+        color: white !important;
+        border: 1px solid rgba(255, 255, 255, 0.25) !important;
         border-radius: 14px !important;
-        padding: 1.2rem !important;
-        box-shadow: var(--shadow-sm) !important;
+        padding: 0.85rem 2rem !important;
+        font-size: 1.05rem !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.3px;
+        box-shadow:
+            inset 1.5px 1.5px 1px -0.5px rgba(255, 255, 255, 0.5),
+            inset -1px -1px 1px -0.5px rgba(255, 255, 255, 0.2),
+            0 8px 25px rgba(37, 99, 235, 0.45) !important;
+        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
     }
+    div[data-testid="stButton"] > button:hover {
+        background: linear-gradient(135deg, rgba(59, 130, 246, 0.95) 0%, rgba(37, 99, 235, 0.95) 100%) !important;
+        border-color: rgba(255, 255, 255, 0.4) !important;
+        box-shadow:
+            inset 1.5px 1.5px 1px -0.5px rgba(255, 255, 255, 0.65),
+            inset -1px -1px 1px -0.5px rgba(255, 255, 255, 0.25),
+            0 12px 35px rgba(37, 99, 235, 0.6),
+            0 0 20px rgba(56, 189, 248, 0.35) !important;
+        transform: translateY(-2px);
+    }
+
+    /* ── Cohesive Liquid Glass File Uploader ── */
+    div[data-testid="stFileUploader"] {
+        background: color-mix(in srgb, rgba(20, 26, 42, 0.5) 80%, transparent) !important;
+        -webkit-backdrop-filter: blur(16px) saturate(180%) brightness(1.05) !important;
+        backdrop-filter: blur(16px) saturate(180%) brightness(1.05) !important;
+        border: 1px solid rgba(255, 255, 255, 0.12) !important;
+        border-radius: 16px !important;
+        padding: 1.2rem !important;
+        margin-bottom: 1.2rem !important;
+        box-shadow:
+            inset 1.5px 1.5px 1px -0.5px rgba(255, 255, 255, 0.35),
+            inset -1px -1px 1px -0.5px rgba(255, 255, 255, 0.12),
+            0 8px 24px rgba(0, 0, 0, 0.3) !important;
+        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    }
+    div[data-testid="stFileUploader"]:hover {
+        border-color: rgba(99, 179, 237, 0.4) !important;
+        box-shadow:
+            inset 1.5px 1.5px 1.5px -0.5px rgba(255, 255, 255, 0.5),
+            inset -1px -1px 1px -0.5px rgba(255, 255, 255, 0.18),
+            0 12px 32px rgba(0, 0, 0, 0.4),
+            0 0 18px rgba(56, 189, 248, 0.15) !important;
+    }
+    /* Label styling */
+    div[data-testid="stFileUploader"] label {
+        color: #f8fafc !important;
+        font-size: 1.2rem !important;
+        font-weight: 700 !important;
+        margin-bottom: 0.8rem !important;
+    }
+    /* Required marker */
+    div[data-testid="stFileUploader"] label [data-testid="stWidgetLabel"] p::after {
+        content: "  *";
+        color: #f87171;
+        font-weight: 900;
+        font-size: 1.3rem !important;
+    }
+    /* Dropzone area styling (Glass Well) */
     div[data-testid="stFileUploaderDropzone"] {
-        background: #F8FAFC !important;
-        border: 1.5px dashed #CBD5E1 !important;
-        border-radius: 10px !important;
+        background: rgba(0, 0, 0, 0.32) !important;
+        border: 1.5px dashed rgba(255, 255, 255, 0.2) !important;
+        border-radius: 12px !important;
+        padding: 1rem !important;
+        box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.4) !important;
         transition: all 0.2s ease !important;
     }
     div[data-testid="stFileUploaderDropzone"]:hover {
-        border-color: #0284C7 !important;
-        background: #F0F9FF !important;
+        border-color: rgba(99, 179, 237, 0.6) !important;
+        background: rgba(56, 189, 248, 0.05) !important;
     }
+    /* Text inside dropzone */
+    div[data-testid="stFileUploaderDropzone"] p {
+        color: #cbd5e1 !important;
+        font-size: 0.82rem !important;
+    }
+    /* Browse files button (Liquid Pill) */
     div[data-testid="stFileUploaderDropzone"] button {
-        background: #002B49 !important;
-        color: #FFFFFF !important;
-        border-radius: 6px !important;
-        border: none !important;
+        background: color-mix(in srgb, rgba(56, 189, 248, 0.18) 85%, transparent) !important;
+        -webkit-backdrop-filter: blur(10px) !important;
+        backdrop-filter: blur(10px) !important;
+        color: #38bdf8 !important;
+        border: 1px solid rgba(56, 189, 248, 0.35) !important;
+        border-radius: 9999px !important;
+        padding: 0.35rem 1rem !important;
+        font-size: 0.78rem !important;
         font-weight: 600 !important;
-    }
-    div[data-testid="stExpander"] {
-        background: #FFFFFF !important;
-        border: 1px solid #E2E8F0 !important;
-        border-radius: 12px !important;
-        box-shadow: var(--shadow-sm) !important;
-    }
-    .styled-divider {
-        height: 1px;
-        background: #E2E8F0;
-        margin: 1.75rem 0;
-        border: none;
-    }
-    """
-else:
-    # ── DARK MODE STYLING ──
-    css_theme = """
-    :root {
-        --bg-main: #0B132B;
-        --card-bg: #151E33;
-        --card-border: rgba(255, 255, 255, 0.12);
-        --primary-navy: #38BDF8;
-        --accent-cyan: #0284C7;
-        --text-primary: #F8FAFC;
-        --text-secondary: #CBD5E1;
-        --text-muted: #94A3B8;
-        --badge-bg: rgba(56, 189, 248, 0.15);
-        --badge-border: rgba(56, 189, 248, 0.35);
-        --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.25);
-        --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.35);
-        --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.45);
-    }
-    .stApp {
-        background-color: var(--bg-main) !important;
-        background: radial-gradient(circle at 10% 10%, rgba(56, 189, 248, 0.08), transparent 45%),
-                    radial-gradient(circle at 90% 90%, rgba(16, 185, 129, 0.06), transparent 45%),
-                    #0B132B !important;
-        color: var(--text-primary) !important;
-    }
-    .tml-card {
-        background: var(--card-bg);
-        border: 1px solid var(--card-border);
-        border-radius: 14px;
-        box-shadow: var(--shadow-sm);
-        padding: 1.5rem;
-        margin-bottom: 1.25rem;
-    }
-    .hero-banner {
-        background: #151E33;
-        border: 1px solid rgba(255, 255, 255, 0.14);
-        border-top: 4px solid #38BDF8;
-        border-radius: 16px;
-        padding: 1.75rem 2rem;
-        margin-bottom: 1.5rem;
-        box-shadow: var(--shadow-md);
-        position: relative;
-    }
-    .hero-title {
-        font-size: 2.1rem;
-        font-weight: 800;
-        color: #38BDF8;
-        margin: 0.35rem 0 0.5rem 0;
-        letter-spacing: -0.6px;
-    }
-    .hero-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        background: rgba(56, 189, 248, 0.15);
-        border: 1px solid rgba(56, 189, 248, 0.35);
-        border-radius: 9999px;
-        padding: 4px 12px;
-        font-size: 0.76rem;
-        font-weight: 700;
-        color: #38BDF8;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-    }
-    .hero-description {
-        font-size: 0.95rem;
-        color: #CBD5E1;
-        line-height: 1.55;
-        max-width: 860px;
-        margin: 0;
-    }
-    .hero-feature-item {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        background: #1E293B;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 8px;
-        padding: 5px 12px;
-        font-size: 0.8rem;
-        color: #E2E8F0;
-        font-weight: 600;
-    }
-    .section-title {
-        font-size: 1.15rem;
-        font-weight: 700;
-        color: #F8FAFC;
-        margin: 0;
-    }
-    .section-subtitle {
-        font-size: 0.82rem;
-        color: #94A3B8;
-        margin-top: 2px;
-    }
-    .capacity-panel {
-        background: #151E33;
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        border-radius: 14px;
-        padding: 1.4rem;
-        box-shadow: var(--shadow-sm);
-        height: 100%;
-    }
-    .capacity-day-card {
-        background: #1E293B;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 10px;
-        padding: 1rem 1.1rem;
-        margin-bottom: 0.85rem;
-    }
-    div[data-testid="stNumberInput"] input {
-        background: #1E293B !important;
-        color: #F8FAFC !important;
-        border: 1px solid rgba(255, 255, 255, 0.15) !important;
-        border-radius: 8px !important;
-        font-weight: 600 !important;
-    }
-    div[data-testid="stFileUploader"] {
-        background: #151E33 !important;
-        border: 1px solid rgba(255, 255, 255, 0.12) !important;
-        border-radius: 14px !important;
-        padding: 1.2rem !important;
-    }
-    div[data-testid="stFileUploaderDropzone"] {
-        background: rgba(0, 0, 0, 0.25) !important;
-        border: 1.5px dashed rgba(255, 255, 255, 0.2) !important;
-        border-radius: 10px !important;
-    }
-    div[data-testid="stFileUploaderDropzone"] button {
-        background: #0284C7 !important;
-        color: #FFFFFF !important;
-        border-radius: 6px !important;
-        border: none !important;
-        font-weight: 600 !important;
-    }
-    div[data-testid="stExpander"] {
-        background: #151E33 !important;
-        border: 1px solid rgba(255, 255, 255, 0.12) !important;
-        border-radius: 12px !important;
-    }
-    .styled-divider {
-        height: 1px;
-        background: rgba(255, 255, 255, 0.12);
-        margin: 1.75rem 0;
-        border: none;
-    }
-    """
-
-st.markdown(
-    f"""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-    html, body, [class*="css"] {{
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    }}
-    {css_theme}
-
-    /* ── Global Typography & Layout Polishes ── */
-    h1, h2, h3, h4, h5, h6 {{
-        font-family: 'Inter', sans-serif;
-    }}
-    
-    /* ── Primary CTA Button ── */
-    div[data-testid="stButton"] > button {{
-        background: linear-gradient(135deg, #002B49 0%, #003F6E 100%) !important;
-        color: #FFFFFF !important;
-        border: 1px solid #002B49 !important;
-        border-radius: 10px !important;
-        padding: 0.8rem 2rem !important;
-        font-size: 1.05rem !important;
-        font-weight: 700 !important;
-        letter-spacing: 0.3px !important;
-        box-shadow: 0 4px 12px rgba(0, 43, 73, 0.25) !important;
-        transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
-    }}
-    div[data-testid="stButton"] > button:hover {{
-        background: linear-gradient(135deg, #0284C7 0%, #0369A1 100%) !important;
-        border-color: #0284C7 !important;
-        box-shadow: 0 6px 18px rgba(2, 132, 199, 0.35) !important;
-        transform: translateY(-1px) !important;
-    }}
-
-    /* ── Secondary / Download Buttons ── */
-    div[data-testid="stDownloadButton"] > button {{
-        background: #FFFFFF !important;
-        color: #002B49 !important;
-        border: 1.5px solid #002B49 !important;
-        border-radius: 10px !important;
-        padding: 0.65rem 1.4rem !important;
-        font-weight: 700 !important;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05) !important;
+        box-shadow:
+            inset 1px 1px 0.5px rgba(255, 255, 255, 0.3),
+            0 2px 8px rgba(0, 0, 0, 0.2) !important;
         transition: all 0.2s ease !important;
-    }}
-    div[data-testid="stDownloadButton"] > button:hover {{
-        background: #002B49 !important;
-        color: #FFFFFF !important;
-        box-shadow: 0 4px 12px rgba(0, 43, 73, 0.2) !important;
-    }}
+    }
+    div[data-testid="stFileUploaderDropzone"] button:hover {
+        background: rgba(56, 189, 248, 0.3) !important;
+        border-color: #38bdf8 !important;
+        box-shadow: 0 0 12px rgba(56, 189, 248, 0.4) !important;
+        color: #ffffff !important;
+    }
 
-    /* ── Status Dots ── */
-    .status-dot {{
+    /* ── Status indicator ── */
+    .status-dot {
         width: 8px;
         height: 8px;
         border-radius: 50%;
         display: inline-block;
         margin-right: 6px;
-    }}
-    .status-dot.uploaded {{
-        background: #10B981;
-        box-shadow: 0 0 6px rgba(16, 185, 129, 0.4);
-    }}
-    .status-dot.pending {{
-        background: #F59E0B;
-        box-shadow: 0 0 6px rgba(245, 158, 11, 0.4);
-    }}
+    }
+    .status-dot.uploaded { 
+        background: #34d399; 
+        box-shadow: 0 0 8px #34d399; 
+    }
+    .status-dot.pending  { 
+        background: #f87171; 
+        box-shadow: 0 0 8px #f87171; 
+    }
 
-    footer {{ visibility: hidden; }}
-    #MainMenu {{ visibility: hidden; }}
+    footer { visibility: hidden; }
+    #MainMenu { visibility: hidden; }
     </style>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
+
 # ─────────────────────────────────────────────
-# FILE REGISTRY
+# FILE REGISTRY  (module-level — accessible everywhere)
 # ─────────────────────────────────────────────
+# Each entry: session-state key → human-readable label
 FILE_LABELS = {
     "vin_plan_tcf1_yesterday": "Yesterday's VIN Plan – TCF 1",
     "vin_plan_tcf2_yesterday": "Yesterday's VIN Plan – TCF 2",
@@ -479,9 +407,12 @@ FILE_LABELS = {
 FILE_KEYS = list(FILE_LABELS.keys())
 TOTAL_FILES = len(FILE_KEYS)
 
+
 # ─────────────────────────────────────────────
 # FILE DETECTION & RESOLUTION HELPERS
 # ─────────────────────────────────────────────
+import re
+
 def detect_file_type(filename: str):
     """
     Classifies a filename into one of the 10 target categories regardless
@@ -490,6 +421,7 @@ def detect_file_type(filename: str):
     if not filename:
         return None
     fn = filename.upper().strip()
+    # Normalize separators (underscores, hyphens, periods, extra spaces) to single spaces
     fn_norm = re.sub(r'[^A-Z0-9]+', ' ', fn)
     
     # 1. Paint Float Report (PPC Float Report...)
@@ -512,7 +444,7 @@ def detect_file_type(filename: str):
     if 'PENDING' in fn_norm and ('BIW' in fn_norm or 'PLAN' in fn_norm):
         return 'pending_plan_biw'
         
-    # 6. Next 3-Days BIW Plan
+    # 6. Next 3-Days BIW Plan (e.g. BIW Plan 3 days declaration..., Next 3 days BIW...)
     has_3day_kw = any(k in fn_norm for k in ['3 DAYS', '3DAYS', '3 DAY', '3DAY', 'NEXT 3', 'NEXT 2', 'DECLARATION'])
     has_biw_kw = ('BIW' in fn_norm or 'PLAN' in fn_norm or 'DECLARATION' in fn_norm)
     if has_3day_kw and has_biw_kw and 'PENDING' not in fn_norm:
@@ -555,16 +487,16 @@ def upload_card(label: str, key: str, icon: str = "📄") -> object:
     if active_f is not None:
         is_manual = (active_f == st.session_state.get(key))
         badge_text = "Manual Override" if is_manual else "Auto-Detected (Bulk)"
-        badge_bg = "#EFF6FF" if is_manual else "#ECFDF5"
-        badge_color = "#1D4ED8" if is_manual else "#047857"
-        badge_border = "#BFDBFE" if is_manual else "#A7F3D0"
+        badge_bg = "color-mix(in srgb, rgba(59, 130, 246, 0.25) 85%, transparent)" if is_manual else "color-mix(in srgb, rgba(16, 185, 129, 0.25) 85%, transparent)"
+        badge_color = "#93c5fd" if is_manual else "#6ee7b7"
+        badge_border = "rgba(59, 130, 246, 0.4)" if is_manual else "rgba(16, 185, 129, 0.4)"
         st.markdown(
             f"""
-            <div style="background:{'#F8FAFC' if is_light else '#1E293B'}; border:1px solid {'#E2E8F0' if is_light else 'rgba(255,255,255,0.1)'}; border-radius:8px; padding:6px 12px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
-                <span style="font-size:0.8rem; color:{'#0F172A' if is_light else '#F8FAFC'}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600;">
-                    📁 {active_f.name}
+            <div style="background:color-mix(in srgb, rgba(20,26,42,0.65) 85%, transparent); -webkit-backdrop-filter:blur(14px) saturate(180%); backdrop-filter:blur(14px) saturate(180%); border:1px solid rgba(255,255,255,0.14); box-shadow: inset 1px 1px 0.5px rgba(255,255,255,0.3), inset -1px -1px 0.5px rgba(255,255,255,0.1), 0 4px 14px rgba(0,0,0,0.3); border-radius:12px; padding:7px 14px; margin-bottom:10px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+                <span style="font-size:0.82rem; color:#f1f5f9; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:500;">
+                    📁 <strong>{active_f.name}</strong>
                 </span>
-                <span style="font-size:0.7rem; color:{badge_color}; background:{badge_bg}; border:1px solid {badge_border}; padding:2px 8px; border-radius:9999px; font-weight:700; white-space:nowrap;">
+                <span style="font-size:0.7rem; color:{badge_color}; background:{badge_bg}; border:1px solid {badge_border}; padding:3px 10px; border-radius:9999px; font-weight:600; white-space:nowrap; box-shadow:inset 1px 1px 0.5px rgba(255,255,255,0.2);">
                     {badge_text}
                 </span>
             </div>
@@ -577,35 +509,32 @@ def upload_card(label: str, key: str, icon: str = "📄") -> object:
         key=key,
     )
 
+
 # ─────────────────────────────────────────────
-# 3. HEADER AND HERO SECTION
+# HERO BANNER
 # ─────────────────────────────────────────────
 st.markdown(
     """
     <div class="hero-banner">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px;">
-            <div>
-                <div class="hero-badge">
-                    <span style="display:inline-block; width:8px; height:8px; background:#10B981; border-radius:50%;"></span>
-                    TATA MOTORS LIMITED – PRODUCTION PLANNING
-                </div>
-                <h1 class="hero-title">TML VIN Generation &amp; Production Plan</h1>
-                <p class="hero-description">
-                    Enterprise manufacturing sequence optimizer for <strong>TCF 1</strong> (Punch EV / Petrol) and 
-                    <strong>TCF 2</strong> (Harrier / Safari) production lines. Dynamic stage-wise float matching, 
-                    WIP prioritization, and automated 3-day rolling capacity balancing.
-                </p>
-            </div>
+        <div class="hero-badge">
+            <span style="display:inline-block; width:8px; height:8px; background:#10b981; border-radius:50%; box-shadow:0 0 8px #10b981; margin-right:6px;"></span>
+            🏭 &nbsp; Tata Motors Limited — Production Planning
         </div>
-        <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:1.25rem; border-top:1px solid #F1F5F9; padding-top:1rem;">
+        <p class="hero-title">TML VIN Generation & Production Plan</p>
+        <p class="hero-description">
+            Automated multi-day rolling sequence optimizer for <strong>TCF 1</strong> (Punch EV / Petrol) and 
+            <strong>TCF 2</strong> (Harrier / Safari) production lines. Dynamic stage-wise float matching and 
+            WIP prioritization packed to daily capacity constraints.
+        </p>
+        <div class="hero-features">
             <div class="hero-feature-item">
-                <span style="color:#0284C7; font-size:1rem;">🔄</span> 3-Day Rolling Plan
+                <span style="font-size: 1.1rem; color: #38bdf8;">🔄</span> 3-Day Rolling Plan
             </div>
             <div class="hero-feature-item">
-                <span style="color:#10B981; font-size:1rem;">⚡</span> Stage-wise Float Matching
+                <span style="font-size: 1.1rem; color: #10b981;">⚡</span> Stage-wise Float Matching
             </div>
             <div class="hero-feature-item">
-                <span style="color:#DC2626; font-size:1rem;">🛡️</span> Pune Plant Exclusions Active
+                <span style="font-size: 1.1rem; color: #f43f5e;">🛡️</span> Pune Plant Exclusions Active
             </div>
         </div>
     </div>
@@ -613,8 +542,9 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+
 # ─────────────────────────────────────────────
-# 4. BULK FILE UPLOAD SECTION
+# BULK FILE UPLOAD & AUTO-DETECTION
 # ─────────────────────────────────────────────
 if "uploader_version" not in st.session_state:
     st.session_state["uploader_version"] = 0
@@ -623,19 +553,18 @@ bulk_key = f"bulk_file_uploader_{st.session_state['uploader_version']}"
 
 st.markdown(
     """
-    <div class="tml-card">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 0.75rem; flex-wrap:wrap; gap:10px;">
-            <div>
-                <div style="display:flex; align-items:center; gap:8px;">
-                    <span style="font-size:1.25rem;">📂</span>
-                    <h3 class="section-title">Bulk File Upload &amp; Automatic Name Detection</h3>
+    <div class="liquid-glass" style="padding: 1.8rem; margin-bottom: 1.8rem; border-color: rgba(56, 189, 248, 0.35); box-shadow: inset 1.5px 1.5px 1px -0.5px rgba(255, 255, 255, 0.45), 0 16px 40px rgba(0,0,0,0.4), 0 0 25px rgba(56, 189, 248, 0.12);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 0.8rem; flex-wrap:wrap; gap:10px;">
+            <div style="display:flex; align-items:center; gap:12px;">
+                <span class="glass-pill" style="font-size: 1.3rem; padding: 6px 12px; color:#38bdf8;">⚡</span>
+                <div>
+                    <h3 style="margin:0; font-size:1.3rem; font-weight:700; color:#f8fafc; letter-spacing:-0.3px;">
+                        Bulk File Upload &amp; Automatic Name Detection
+                    </h3>
+                    <p style="margin:0; font-size:0.84rem; color:#94a3b8; margin-top:2px;">
+                        Drag and drop all 10 planning and float files at once — names are automatically identified regardless of date or month.
+                    </p>
                 </div>
-                <p class="section-subtitle">
-                    Drag and drop all 10 planning, float, and WIP files at once. Names are automatically identified regardless of date or month.
-                </p>
-            </div>
-            <div style="font-size:0.75rem; color:#64748B; background:#F8FAFC; border:1px solid #E2E8F0; padding:4px 10px; border-radius:6px; font-weight:600;">
-                Supported: .xlsx, .xls, .xlsm, .csv, .xlsb (Max 200MB)
             </div>
         </div>
     """,
@@ -671,15 +600,15 @@ if bulk_files:
     st.session_state["bulk_detected_files"] = detected_mapping
 
     # Render mapping review table
-    st.markdown("<h4 style='color:#002B49; font-size:0.95rem; font-weight:700; margin-top:1rem; margin-bottom:0.5rem;'>🎯 File Auto-Detection &amp; Mapping Matrix</h4>", unsafe_allow_html=True)
+    st.markdown("<h4 style='color:#38bdf8; font-size:1rem; margin-top:1rem; margin-bottom:0.5rem;'>🎯 Auto-Detection &amp; Mapping Results</h4>", unsafe_allow_html=True)
     
     head_col1, head_col2, head_col3 = st.columns([3, 3, 2])
     with head_col1:
-        st.markdown("<span style='font-size:0.72rem; color:#64748B; font-weight:700; text-transform:uppercase;'>Uploaded File</span>", unsafe_allow_html=True)
+        st.markdown("<span style='font-size:0.75rem; color:#94a3b8; font-weight:700; text-transform:uppercase;'>Uploaded File</span>", unsafe_allow_html=True)
     with head_col2:
-        st.markdown("<span style='font-size:0.72rem; color:#64748B; font-weight:700; text-transform:uppercase;'>Auto-Detected Category</span>", unsafe_allow_html=True)
+        st.markdown("<span style='font-size:0.75rem; color:#94a3b8; font-weight:700; text-transform:uppercase;'>Auto-Detected Category</span>", unsafe_allow_html=True)
     with head_col3:
-        st.markdown("<span style='font-size:0.72rem; color:#64748B; font-weight:700; text-transform:uppercase;'>Override Category</span>", unsafe_allow_html=True)
+        st.markdown("<span style='font-size:0.75rem; color:#94a3b8; font-weight:700; text-transform:uppercase;'>Override Category</span>", unsafe_allow_html=True)
         
     for f in bulk_files:
         matched_cat = None
@@ -690,12 +619,12 @@ if bulk_files:
                 
         r_c1, r_c2, r_c3 = st.columns([3, 3, 2])
         with r_c1:
-            st.markdown(f"<div style='font-size:0.82rem; color:#0F172A; font-weight:500; padding:6px 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;' title='{f.name}'>📄 {f.name}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='font-size:0.85rem; color:#f1f5f9; padding:6px 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;' title='{f.name}'>📄 {f.name}</div>", unsafe_allow_html=True)
         with r_c2:
             if matched_cat:
-                st.markdown(f"<div style='padding:4px 0;'><span style='font-size:0.75rem; color:#065F46; background:#ECFDF5; border:1px solid #A7F3D0; padding:3px 10px; border-radius:9999px; font-weight:700;'>✓ {FILE_LABELS[matched_cat]}</span></div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='padding:4px 0;'><span class='glass-pill' style='font-size:0.78rem; color:#6ee7b7; background:color-mix(in srgb, rgba(16,185,129,0.2) 85%, transparent); border:1px solid rgba(16,185,129,0.4); font-weight:600;'>✓ {FILE_LABELS[matched_cat]}</span></div>", unsafe_allow_html=True)
             else:
-                st.markdown("<div style='padding:4px 0;'><span style='font-size:0.75rem; color:#991B1B; background:#FEF2F2; border:1px solid #FECACA; padding:3px 10px; border-radius:9999px; font-weight:700;'>⚠️ Unrecognized</span></div>", unsafe_allow_html=True)
+                st.markdown("<div style='padding:4px 0;'><span class='glass-pill' style='font-size:0.78rem; color:#f87171; background:color-mix(in srgb, rgba(239,68,68,0.2) 85%, transparent); border:1px solid rgba(239,68,68,0.4); font-weight:600;'>⚠️ Unrecognized</span></div>", unsafe_allow_html=True)
         with r_c3:
             options = ["(Auto-detect)"] + list(FILE_LABELS.keys())
             curr_index = 0
@@ -735,8 +664,9 @@ else:
 
 st.markdown("</div>", unsafe_allow_html=True)
 
+
 # ─────────────────────────────────────────────
-# LIVE UPLOAD PROGRESS INDICATOR
+# LIVE UPLOAD PROGRESS
 # ─────────────────────────────────────────────
 uploaded_count = sum(
     1 for k in FILE_KEYS if get_active_file(k) is not None
@@ -748,43 +678,44 @@ col_prog_1, col_prog_2 = st.columns([1, 5])
 with col_prog_1:
     st.markdown(
         f"""
-        <div class="tml-card" style="text-align:center; padding: 1rem 0.5rem; margin-bottom:0;">
-            <div style="font-size:2.2rem; font-weight:800; color:#002B49; line-height:1;">{uploaded_count}/{TOTAL_FILES}</div>
-            <div style="font-size:0.75rem; color:#64748B; margin-top:4px; font-weight:700; text-transform:uppercase;">Files Verified</div>
+        <div class="liquid-glass" style="text-align:center; border-radius:18px; padding: 1.1rem 0.6rem;">
+            <div style="font-size:2.3rem;font-weight:800;color:#38bdf8; text-shadow:0 0 20px rgba(56,189,248,0.35);">{uploaded_count}/{TOTAL_FILES}</div>
+            <div style="font-size:0.75rem;color:#94a3b8;margin-top:4px; font-weight:600;">Files Ready</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
 with col_prog_2:
-    st.progress(pct / 100, text=f"Pipeline Readiness — {pct}% files prepared")
-    # Mini status checklist
+    st.progress(pct / 100, text=f"Upload Progress — {pct}% complete")
+    # Mini status checklist (2 rows for readability with 10 files)
     status_html = ""
     for k, label in FILE_LABELS.items():
         dot_cls = "uploaded" if get_active_file(k) is not None else "pending"
         status_html += (
-            f'<span style="margin-right:12px; font-size:0.75rem; color:#475569; font-weight:500;">'
+            f'<span style="margin-right:14px;font-size:0.75rem;color:#a0aec0;">'
             f'<span class="status-dot {dot_cls}"></span>{label}</span>'
         )
     st.markdown(
-        f'<div style="margin-top:6px; line-height:2.0;">{status_html}</div>',
+        f'<div style="margin-top:8px;line-height:2.2;">{status_html}</div>',
         unsafe_allow_html=True,
     )
 
+
 # ─────────────────────────────────────────────
-# 5. FILE UPLOAD WORKFLOW GROUPS (COLLAPSIBLE / OVERRIDES)
+# INDIVIDUAL FILE UPLOADERS & OVERRIDES (COLLAPSIBLE)
 # ─────────────────────────────────────────────
 st.markdown('<div class="styled-divider"></div>', unsafe_allow_html=True)
 
 with st.expander("📂 Individual File Uploaders (Manual Upload & Single File Overrides)", expanded=(uploaded_count == 0)):
-    # GROUP 1 – Yesterday's VIN Generation Plans
+    # GROUP 1
     st.markdown(
         """
-        <div style="display:flex; align-items:center; gap:8px; margin: 1rem 0 0.8rem 0;">
-            <span style="background:#EFF6FF; color:#1D4ED8; padding:4px 8px; border-radius:6px; font-size:0.85rem; font-weight:700;">Group 1</span>
+        <div class="section-header">
+            <div class="section-icon" style="background:rgba(66,153,225,0.15);">📋</div>
             <div>
-                <p style="margin:0; font-size:0.95rem; font-weight:700; color:#0F172A;">Yesterday's VIN Generation Plans</p>
-                <p style="margin:0; font-size:0.75rem; color:#64748B;">Baseline plans from the previous production day for TCF 1 &amp; TCF 2</p>
+                <p class="section-title">Group 1 — Yesterday's VIN Generation Plans</p>
+                <p class="section-subtitle">Baseline plans from the previous production day for TCF 1 &amp; TCF 2</p>
             </div>
         </div>
         """,
@@ -804,14 +735,14 @@ with st.expander("📂 Individual File Uploaders (Manual Upload & Single File Ov
             icon="📄",
         )
 
-    # GROUP 2 – Today's VIN Generation Lists
+    # GROUP 2
     st.markdown(
         """
-        <div style="display:flex; align-items:center; gap:8px; margin: 1.5rem 0 0.8rem 0;">
-            <span style="background:#ECFDF5; color:#047857; padding:4px 8px; border-radius:6px; font-size:0.85rem; font-weight:700;">Group 2</span>
+        <div class="section-header">
+            <div class="section-icon" style="background:rgba(72,187,120,0.15);">📝</div>
             <div>
-                <p style="margin:0; font-size:0.95rem; font-weight:700; color:#0F172A;">Today's VIN Generation Lists</p>
-                <p style="margin:0; font-size:0.75rem; color:#64748B;">Current-day VIN lists for TCF 1 &amp; TCF 2 production tracks</p>
+                <p class="section-title">Group 2 — Today's VIN Generation Lists</p>
+                <p class="section-subtitle">Current-day VIN lists for TCF 1 &amp; TCF 2 production tracks</p>
             </div>
         </div>
         """,
@@ -831,14 +762,14 @@ with st.expander("📂 Individual File Uploaders (Manual Upload & Single File Ov
             icon="📝",
         )
 
-    # GROUP 3 – Reports & Work-In-Progress Data
+    # GROUP 3
     st.markdown(
         """
-        <div style="display:flex; align-items:center; gap:8px; margin: 1.5rem 0 0.8rem 0;">
-            <span style="background:#FFFBEB; color:#B45309; padding:4px 8px; border-radius:6px; font-size:0.85rem; font-weight:700;">Group 3</span>
+        <div class="section-header">
+            <div class="section-icon" style="background:rgba(237,137,54,0.15);">📊</div>
             <div>
-                <p style="margin:0; font-size:0.95rem; font-weight:700; color:#0F172A;">Reports &amp; Work-In-Progress Data</p>
-                <p style="margin:0; font-size:0.75rem; color:#64748B;">Paint float, WIP trackers, BIW plan data and stage-wise reports</p>
+                <p class="section-title">Group 3 — Reports &amp; Work-In-Progress Data</p>
+                <p class="section-subtitle">Paint float, WIP trackers, BIW plan data and stage-wise reports</p>
             </div>
         </div>
         """,
@@ -864,20 +795,18 @@ with st.expander("📂 Individual File Uploaders (Manual Upload & Single File Ov
 
 
 # ─────────────────────────────────────────────
-# 6. PHASE 3 – SHIFT PRODUCTION TARGETS (MANUAL ENTRY)
+# SHIFT PRODUCTION QUANTITIES (MANUAL INPUT)
 # ─────────────────────────────────────────────
 st.markdown(
     """
-    <div class="tml-card" style="border-left: 4px solid #0284C7;">
-        <div style="display:flex; align-items:center; gap:8px; margin-bottom:0.4rem;">
-            <span style="font-size:1.2rem;">⏱️</span>
-            <h4 style="margin:0; font-size:1.05rem; font-weight:700; color:#002B49;">
-                Phase 3 — Shift Production Targets (Manual Entry)
-            </h4>
-        </div>
-        <p style="margin:0 0 1rem 0; font-size:0.85rem; color:#64748B; line-height:1.4;">
-            Specify the <strong>Expected VIN B &amp; C shift tentative production quantities</strong> for TCF 1 and TCF 2 tracks before initializing the 3-day sequence.
+    <div style="background:rgba(237,137,54,0.05); border:1px solid rgba(237,137,54,0.2); border-radius:12px; padding:1.2rem; margin-bottom:1.5rem;">
+        <h4 style="margin:0 0 0.5rem 0; color:#ed8936; font-size:1.1rem; display:flex; align-items:center; gap:8px;">
+            📊 Phase 3: Shift Production Targets (Manual Entry)
+        </h4>
+        <p style="margin:0; font-size:0.85rem; color:#a0aec0; line-height:1.4;">
+            Specify the <strong>Expected VIN B &amp; C shift tentative production quantities</strong> for TCF 1 and TCF 2 tracks before initializing plans.
         </p>
+    </div>
     """,
     unsafe_allow_html=True,
 )
@@ -906,20 +835,20 @@ with qty_col2:
         help="Enter or select the tentative production quantity for TCF 2 B & C shift."
     )
 
-st.markdown("</div>", unsafe_allow_html=True)
+st.markdown('<div class="styled-divider"></div>', unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────
-# 7. PRODUCTION LINE CAPACITIES
+# PRODUCTION LINE CAPACITIES (MANUAL ADJUSTMENT PER DAY)
 # ─────────────────────────────────────────────
 st.markdown(
     """
-    <div style="margin: 1.5rem 0 1rem 0;">
-        <div style="display:flex; align-items:center; gap:8px;">
-            <span style="font-size:1.25rem;">📅</span>
-            <h3 class="section-title">Production Line Capacities</h3>
+    <div class="section-header">
+        <div class="section-icon" style="background:rgba(156,163,175,0.15);">📅</div>
+        <div>
+            <p class="section-title">Production Line Capacities</p>
+            <p class="section-subtitle">Set planning capacities for each specific day on both tracks</p>
         </div>
-        <p class="section-subtitle">Configure 3-day planning capacity limits and powertrain mix constraints for TCF-1 and TCF-2</p>
     </div>
     """,
     unsafe_allow_html=True,
@@ -930,15 +859,19 @@ baseline_date = None
 yest_tcf1 = get_active_file("vin_plan_tcf1_yesterday")
 if yest_tcf1 is not None:
     try:
+        import io
+        import openpyxl
+        import datetime
         wb_temp = openpyxl.load_workbook(io.BytesIO(yest_tcf1.getvalue()), read_only=True, data_only=True)
         if 'Plan Summary' in wb_temp.sheetnames:
             ws_temp = wb_temp['Plan Summary']
-            val_h2 = ws_temp.cell(row=2, column=8).value
+            val_h2 = ws_temp.cell(row=2, column=8).value # Yesterday's Day 1
             if isinstance(val_h2, (datetime.datetime, datetime.date)):
                 baseline_date = val_h2
     except Exception:
         pass
 
+import datetime
 if baseline_date is None:
     baseline_date = datetime.date.today()
 elif isinstance(baseline_date, datetime.datetime):
@@ -949,7 +882,7 @@ def get_next_planning_days(start_date, count=3):
     curr = start_date
     while len(days) < count:
         curr += datetime.timedelta(days=1)
-        if curr.weekday() == 6:  # Sunday exclusion
+        if curr.weekday() == 6: # Sunday
             continue
         days.append(curr)
     return days
@@ -960,25 +893,16 @@ d1, d2, d3 = planning_days
 d1_str = d1.strftime('%Y-%m-%d (%A)')
 d2_str = d2.strftime('%Y-%m-%d (%A)')
 d3_str = d3.strftime('%Y-%m-%d (%A)')
-day_dates = [d1_str, d2_str, d3_str]
 
 cap_col1, cap_col2 = st.columns(2, gap="large")
 
-# ── TCF-1 PANEL (Punch / Altroz) ──
 with cap_col1:
     st.markdown(
         """
-        <div class="capacity-panel" style="border-top: 4px solid #0284C7;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.1rem;">
-                <div style="display:flex; align-items:center; gap:8px;">
-                    <span style="background:#E0F2FE; color:#0369A1; font-weight:800; font-size:0.75rem; padding:3px 10px; border-radius:6px; border:1px solid #BAE6FD;">
-                        TCF-1 TRACK
-                    </span>
-                    <h4 style="margin:0; font-size:1.1rem; font-weight:700; color:#002B49;">
-                        Punch / Altroz Daily Targets
-                    </h4>
-                </div>
-            </div>
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:1.2rem;">
+            <span class="glass-pill" style="color:#38bdf8; font-weight:700; border-color:rgba(56,189,248,0.4);">TCF-1</span>
+            <h3 style="margin:0; font-size:1.15rem; color:#f8fafc; font-weight:700;">Punch / Altroz Daily Targets</h3>
+        </div>
         """,
         unsafe_allow_html=True
     )
@@ -992,22 +916,8 @@ with cap_col1:
         ("2", 900, 160, 350),
         ("3", 900, 160, 350)
     ]):
-        day_date_label = day_dates[idx]
-        st.markdown(
-            f"""
-            <div class="capacity-day-card">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
-                    <span style="font-weight:700; font-size:0.85rem; color:#002B49;">
-                        🗓️ Day {day_num}
-                    </span>
-                    <span style="font-size:0.75rem; color:#64748B; font-weight:500;">
-                        {day_date_label}
-                    </span>
-                </div>
-            """,
-            unsafe_allow_html=True
-        )
-        sc1, sc2, sc3, sc4 = st.columns([1.1, 1.1, 1.1, 1.3])
+        st.markdown(f"<div style='margin-top:0.8rem; margin-bottom:0.3rem;'><span class='glass-pill' style='padding:2px 12px; font-size:0.75rem; color:#e2e8f0; font-weight:600;'>Day {day_num}</span></div>", unsafe_allow_html=True)
+        sc1, sc2, sc3, sc4 = st.columns(4)
         with sc1:
             total_cap = st.number_input("Total Target", min_value=0, max_value=2000, value=def_total, step=50, key=f"tcf1_cap_d{day_num}")
         with sc2:
@@ -1016,42 +926,25 @@ with cap_col1:
             cng_cap = st.number_input("Punch CNG Limit", min_value=0, max_value=2000, value=def_cng, step=10, key=f"tcf1_cng_d{day_num}")
         with sc4:
             rem_petrol = total_cap - ev_cap - cng_cap
-            st.markdown("<div style='font-size:0.72rem; color:#64748B; font-weight:700; text-transform:uppercase; margin-bottom:4px;'>Petrol Balance</div>", unsafe_allow_html=True)
             if rem_petrol < 0:
-                st.markdown(
-                    f"<div style='background:#FEF2F2; border:1px solid #FECACA; color:#B91C1C; padding:7px 10px; border-radius:8px; font-weight:700; font-size:0.85rem; text-align:center;'>⚠️ Deficit: {rem_petrol}</div>",
-                    unsafe_allow_html=True
-                )
+                st.markdown(f"<span style='color:#fc8181;font-size:0.85rem;font-weight:600;'>Petrol: {rem_petrol} ⚠️</span>", unsafe_allow_html=True)
             else:
-                st.markdown(
-                    f"<div style='background:#F1F5F9; border:1px solid #CBD5E1; color:#0F172A; padding:7px 10px; border-radius:8px; font-weight:700; font-size:0.85rem; text-align:center;'>⛽ Petrol: {rem_petrol}</div>",
-                    unsafe_allow_html=True
-                )
-        st.markdown("</div>", unsafe_allow_html=True)
+                st.markdown(f"<span style='color:#a0aec0;font-size:0.85rem;'>Petrol: <strong>{rem_petrol}</strong></span>", unsafe_allow_html=True)
         tcf1_caps.append(total_cap)
         tcf1_ev.append(ev_cap)
         tcf1_cng.append(cng_cap)
         
-    st.markdown("</div>", unsafe_allow_html=True)
     st.session_state["tcf1_capacities"] = tcf1_caps
     st.session_state["tcf1_ev"] = tcf1_ev
     st.session_state["tcf1_cng"] = tcf1_cng
 
-# ── TCF-2 PANEL (Harrier / Safari) ──
 with cap_col2:
     st.markdown(
         """
-        <div class="capacity-panel" style="border-top: 4px solid #1E3A8A;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.1rem;">
-                <div style="display:flex; align-items:center; gap:8px;">
-                    <span style="background:#EDE9FE; color:#5B21B6; font-weight:800; font-size:0.75rem; padding:3px 10px; border-radius:6px; border:1px solid #DDD6FE;">
-                        TCF-2 TRACK
-                    </span>
-                    <h4 style="margin:0; font-size:1.1rem; font-weight:700; color:#002B49;">
-                        Harrier / Safari Daily Targets
-                    </h4>
-                </div>
-            </div>
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:1.2rem;">
+            <span class="glass-pill" style="color:#34d399; font-weight:700; border-color:rgba(52,211,153,0.4);">TCF-2</span>
+            <h3 style="margin:0; font-size:1.15rem; color:#f8fafc; font-weight:700;">Harrier / Safari Daily Targets</h3>
+        </div>
         """,
         unsafe_allow_html=True
     )
@@ -1065,22 +958,8 @@ with cap_col2:
         ("2", 250, 120, 40),
         ("3", 250, 120, 40)
     ]):
-        day_date_label = day_dates[idx]
-        st.markdown(
-            f"""
-            <div class="capacity-day-card">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
-                    <span style="font-weight:700; font-size:0.85rem; color:#002B49;">
-                        🗓️ Day {day_num}
-                    </span>
-                    <span style="font-size:0.75rem; color:#64748B; font-weight:500;">
-                        {day_date_label}
-                    </span>
-                </div>
-            """,
-            unsafe_allow_html=True
-        )
-        sc1, sc2, sc3, sc4 = st.columns([1.1, 1.1, 1.1, 1.3])
+        st.markdown(f"<div style='margin-top:0.8rem; margin-bottom:0.3rem;'><span class='glass-pill' style='padding:2px 12px; font-size:0.75rem; color:#e2e8f0; font-weight:600;'>Day {day_num}</span></div>", unsafe_allow_html=True)
+        sc1, sc2, sc3, sc4 = st.columns(4)
         with sc1:
             total_cap = st.number_input("Total Target", min_value=0, max_value=2000, value=def_total, step=50, key=f"tcf2_cap_d{day_num}")
         with sc2:
@@ -1089,41 +968,30 @@ with cap_col2:
             tg_cap = st.number_input("TGDI Petrol Limit", min_value=0, max_value=2000, value=def_tgdi, step=10, key=f"tcf2_tg_d{day_num}")
         with sc4:
             rem_diesel = total_cap - et_cap - tg_cap
-            st.markdown("<div style='font-size:0.72rem; color:#64748B; font-weight:700; text-transform:uppercase; margin-bottom:4px;'>Diesel Balance</div>", unsafe_allow_html=True)
             if rem_diesel < 0:
-                st.markdown(
-                    f"<div style='background:#FEF2F2; border:1px solid #FECACA; color:#B91C1C; padding:7px 10px; border-radius:8px; font-weight:700; font-size:0.85rem; text-align:center;'>⚠️ Deficit: {rem_diesel}</div>",
-                    unsafe_allow_html=True
-                )
+                st.markdown(f"<span style='color:#fc8181;font-size:0.85rem;font-weight:600;'>Diesel: {rem_diesel} ⚠️</span>", unsafe_allow_html=True)
             else:
-                st.markdown(
-                    f"<div style='background:#F1F5F9; border:1px solid #CBD5E1; color:#0F172A; padding:7px 10px; border-radius:8px; font-weight:700; font-size:0.85rem; text-align:center;'>⛽ Diesel: {rem_diesel}</div>",
-                    unsafe_allow_html=True
-                )
-        st.markdown("</div>", unsafe_allow_html=True)
+                st.markdown(f"<span style='color:#a0aec0;font-size:0.85rem;'>Diesel: <strong>{rem_diesel}</strong></span>", unsafe_allow_html=True)
         tcf2_caps.append(total_cap)
         tcf2_eturna.append(et_cap)
         tcf2_tgdi.append(tg_cap)
         
-    st.markdown("</div>", unsafe_allow_html=True)
     st.session_state["tcf2_capacities"] = tcf2_caps
     st.session_state["tcf2_eturna"] = tcf2_eturna
     st.session_state["tcf2_tgdi"] = tcf2_tgdi
 
 st.markdown('<div class="styled-divider"></div>', unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────
-# 8. GENERATE 3-DAY PLAN BUTTON (PRIMARY CTA)
-# ─────────────────────────────────────────────
 btn_col1, btn_col2, btn_col3 = st.columns([1, 2, 1])
 with btn_col2:
     generate_clicked = st.button(
-        "⚙️  Generate 3-Day Production Plan",
+        "⚙️  Generate 3-Day Plan",
         key="generate_btn",
         use_container_width=True,
     )
 
 if generate_clicked:
+    # pending_plan_biw and next_3days_biw_plan are optional
     required_keys = [k for k in FILE_KEYS if k not in ("pending_plan_biw", "next_3days_biw_plan")]
     missing = [
         FILE_LABELS[k]
@@ -1137,123 +1005,112 @@ if generate_clicked:
             icon="⚠️",
         )
     else:
-        with st.spinner("Processing stage-wise floats and sequencing 3-day production plans..."):
-            try:
-                yest_tcf1 = get_active_file("vin_plan_tcf1_yesterday")
-                yest_tcf2 = get_active_file("vin_plan_tcf2_yesterday")
-                today_list_tcf1 = get_active_file("vin_list_tcf1_today")
-                today_list_tcf2 = get_active_file("vin_list_tcf2_today")
-                paint_float = get_active_file("paint_float_report")
-                wip_q5 = get_active_file("wip_q5")
-                nova_wip = get_active_file("nova_wip")
-                x1_biw_wip = get_active_file("x1_biw_wip")
+        st.info("⚙️  **Processing and generating 3-Day Production Plans...**")
+        try:
+            import io
+            
+            yest_tcf1 = get_active_file("vin_plan_tcf1_yesterday")
+            yest_tcf2 = get_active_file("vin_plan_tcf2_yesterday")
+            today_list_tcf1 = get_active_file("vin_list_tcf1_today")
+            today_list_tcf2 = get_active_file("vin_list_tcf2_today")
+            paint_float = get_active_file("paint_float_report")
+            wip_q5 = get_active_file("wip_q5")
+            nova_wip = get_active_file("nova_wip")
+            x1_biw_wip = get_active_file("x1_biw_wip")
+            
+            next_3days_biw_plan = get_active_file("next_3days_biw_plan")
+            pending_plan_biw = get_active_file("pending_plan_biw")
+            
+            expected_qty_tcf1 = st.session_state.get("expected_qty_tcf1", 500)
+            expected_qty_tcf2 = st.session_state.get("expected_qty_tcf2", 100)
+            
+            # 1. Process TCF-1 3-Day Plan
+            tcf1_wb = initialize_tcf1_workbook(yest_tcf1)
+            tcf1_wb = update_today_vin_generation(tcf1_wb, today_list_tcf1, "TCF1")
+            
+            tcf1_wip_files = []
+            if nova_wip is not None:
+                tcf1_wip_files.append(nova_wip)
+            if x1_biw_wip is not None:
+                tcf1_wip_files.append(x1_biw_wip)
                 
-                next_3days_biw_plan = get_active_file("next_3days_biw_plan")
-                pending_plan_biw = get_active_file("pending_plan_biw")
+            tcf1_capacities = st.session_state.get("tcf1_capacities", [900, 900, 900])
+            tcf1_ev = st.session_state.get("tcf1_ev", [160, 160, 160])
+            tcf1_cng = st.session_state.get("tcf1_cng", [350, 350, 350])
+            tcf1_wb = update_paint_float_data(
+                tcf1_wb, paint_float, "TCF1", 
+                expected_qty=expected_qty_tcf1,
+                wip_files=tcf1_wip_files,
+                yest_plan_file_or_stream=yest_tcf1,
+                pending_plan_biw=pending_plan_biw,
+                next_3days_biw_plan=next_3days_biw_plan,
+                daily_capacities=tcf1_capacities,
+                sub_limits_1=tcf1_ev,
+                sub_limits_2=tcf1_cng
+            )
+            
+            tcf1_out = io.BytesIO()
+            tcf1_wb.save(tcf1_out)
+            tcf1_out.seek(0)
+            
+            # 2. Process TCF-2 3-Day Plan
+            tcf2_wb = initialize_tcf2_workbook(yest_tcf2)
+            tcf2_wb = update_today_vin_generation(tcf2_wb, today_list_tcf2, "TCF2")
+            
+            tcf2_wip_files = []
+            if wip_q5 is not None:
+                tcf2_wip_files.append(wip_q5)
                 
-                expected_qty_tcf1 = st.session_state.get("expected_qty_tcf1", 500)
-                expected_qty_tcf2 = st.session_state.get("expected_qty_tcf2", 100)
-                
-                # 1. Process TCF-1 3-Day Plan
-                tcf1_wb = initialize_tcf1_workbook(yest_tcf1)
-                tcf1_wb = update_today_vin_generation(tcf1_wb, today_list_tcf1, "TCF1")
-                
-                tcf1_wip_files = []
-                if nova_wip is not None:
-                    tcf1_wip_files.append(nova_wip)
-                if x1_biw_wip is not None:
-                    tcf1_wip_files.append(x1_biw_wip)
-                    
-                tcf1_capacities = st.session_state.get("tcf1_capacities", [900, 900, 900])
-                tcf1_ev = st.session_state.get("tcf1_ev", [160, 160, 160])
-                tcf1_cng = st.session_state.get("tcf1_cng", [350, 350, 350])
-                tcf1_wb = update_paint_float_data(
-                    tcf1_wb, paint_float, "TCF1", 
-                    expected_qty=expected_qty_tcf1,
-                    wip_files=tcf1_wip_files,
-                    yest_plan_file_or_stream=yest_tcf1,
-                    pending_plan_biw=pending_plan_biw,
-                    next_3days_biw_plan=next_3days_biw_plan,
-                    daily_capacities=tcf1_capacities,
-                    sub_limits_1=tcf1_ev,
-                    sub_limits_2=tcf1_cng
-                )
-                
-                tcf1_out = io.BytesIO()
-                tcf1_wb.save(tcf1_out)
-                tcf1_out.seek(0)
-                
-                # 2. Process TCF-2 3-Day Plan
-                tcf2_wb = initialize_tcf2_workbook(yest_tcf2)
-                tcf2_wb = update_today_vin_generation(tcf2_wb, today_list_tcf2, "TCF2")
-                
-                tcf2_wip_files = []
-                if wip_q5 is not None:
-                    tcf2_wip_files.append(wip_q5)
-                    
-                tcf2_capacities = st.session_state.get("tcf2_capacities", [250, 250, 250])
-                tcf2_eturna = st.session_state.get("tcf2_eturna", [120, 120, 120])
-                tcf2_tgdi = st.session_state.get("tcf2_tgdi", [40, 40, 40])
-                tcf2_wb = update_paint_float_data(
-                    tcf2_wb, paint_float, "TCF2", 
-                    expected_qty=expected_qty_tcf2,
-                    wip_files=tcf2_wip_files,
-                    yest_plan_file_or_stream=yest_tcf2,
-                    pending_plan_biw=pending_plan_biw,
-                    next_3days_biw_plan=next_3days_biw_plan,
-                    daily_capacities=tcf2_capacities,
-                    sub_limits_1=tcf2_eturna,
-                    sub_limits_2=tcf2_tgdi
-                )
-                
-                tcf2_out = io.BytesIO()
-                tcf2_wb.save(tcf2_out)
-                tcf2_out.seek(0)
-                
-                # Persist output file bytes and summary details in st.session_state
-                st.session_state["plans_generated"] = True
-                st.session_state["tcf1_out_bytes"] = tcf1_out.getvalue()
-                st.session_state["tcf2_out_bytes"] = tcf2_out.getvalue()
-                st.session_state["tcf1_summary"] = tcf1_wb.summary_counts
-                st.session_state["tcf2_summary"] = tcf2_wb.summary_counts
-                
-                st.toast("3-Day production plans generated successfully!", icon="✅")
-            except Exception as e:
-                st.session_state["plans_generated"] = False
-                st.error(f"Error generating plans: {e}")
+            tcf2_capacities = st.session_state.get("tcf2_capacities", [250, 250, 250])
+            tcf2_eturna = st.session_state.get("tcf2_eturna", [120, 120, 120])
+            tcf2_tgdi = st.session_state.get("tcf2_tgdi", [40, 40, 40])
+            tcf2_wb = update_paint_float_data(
+                tcf2_wb, paint_float, "TCF2", 
+                expected_qty=expected_qty_tcf2,
+                wip_files=tcf2_wip_files,
+                yest_plan_file_or_stream=yest_tcf2,
+                pending_plan_biw=pending_plan_biw,
+                next_3days_biw_plan=next_3days_biw_plan,
+                daily_capacities=tcf2_capacities,
+                sub_limits_1=tcf2_eturna,
+                sub_limits_2=tcf2_tgdi
+            )
+            
+            tcf2_out = io.BytesIO()
+            tcf2_wb.save(tcf2_out)
+            tcf2_out.seek(0)
+            
+            # Persist output file bytes and summary details in st.session_state
+            st.session_state["plans_generated"] = True
+            st.session_state["tcf1_out_bytes"] = tcf1_out.getvalue()
+            st.session_state["tcf2_out_bytes"] = tcf2_out.getvalue()
+            st.session_state["tcf1_summary"] = tcf1_wb.summary_counts
+            st.session_state["tcf2_summary"] = tcf2_wb.summary_counts
+            
+            st.toast("3-Day production plans generated successfully!", icon="✅")
+        except Exception as e:
+            st.session_state["plans_generated"] = False
+            st.error(f"Error generating plans: {e}")
 
-# ─────────────────────────────────────────────
-# OUTPUT DASHBOARDS (AFTER GENERATION)
-# ─────────────────────────────────────────────
+# Render generated output dashboards if state is set
 if st.session_state.get("plans_generated", False):
+    
     tcf1_caps = st.session_state.get("tcf1_capacities", [900, 900, 900])
     tcf2_caps = st.session_state.get("tcf2_capacities", [250, 250, 250])
     tcf1_cap_strs = [f"{cap} (Holiday)" if cap == 0 else str(cap) for cap in tcf1_caps]
     tcf2_cap_strs = [f"{cap} (Holiday)" if cap == 0 else str(cap) for cap in tcf2_caps]
     
-    st.markdown(
-        f"""
-        <div class="tml-card" style="border-left: 5px solid #10B981; background:{'#F0FDF4' if is_light else '#142922'};">
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-                <span style="font-size:1.3rem;">✅</span>
-                <h4 style="margin:0; font-size:1.15rem; font-weight:800; color:{'#065F46' if is_light else '#34D399'};">
-                    Production Plans Generated Successfully
-                </h4>
-            </div>
-            <p style="margin:0; font-size:0.88rem; color:{'#1E293B' if is_light else '#E2E8F0'}; line-height:1.5;">
-                • <strong>TCF-1 (Punch/Altroz):</strong> Day 1: <code>{tcf1_cap_strs[0]}</code> | Day 2: <code>{tcf1_cap_strs[1]}</code> | Day 3: <code>{tcf1_cap_strs[2]}</code><br/>
-                • <strong>TCF-2 (Harrier/Safari):</strong> Day 1: <code>{tcf2_cap_strs[0]}</code> | Day 2: <code>{tcf2_cap_strs[1]}</code> | Day 3: <code>{tcf2_cap_strs[2]}</code>
-            </p>
-        </div>
-        """,
-        unsafe_allow_html=True
+    st.success(
+        f"✅  **Production Plans generated successfully!**\n\n"
+        f"- TCF-1 (Punch/Altroz): Day 1 Capacity: `{tcf1_cap_strs[0]}`, Day 2: `{tcf1_cap_strs[1]}`, Day 3: `{tcf1_cap_strs[2]}`.\n"
+        f"- TCF-2 (Harrier/Safari): Day 1 Capacity: `{tcf2_cap_strs[0]}`, Day 2: `{tcf2_cap_strs[1]}`, Day 3: `{tcf2_cap_strs[2]}`.",
+        icon="✅"
     )
     
-    # Download buttons in enterprise cards
     dl_col1, dl_col2 = st.columns(2, gap="large")
     with dl_col1:
         st.download_button(
-            label="📥 Download TCF-1 (Punch/Altroz) 3-Day Plan",
+            label="📥 Download TCF-1 3-Day Plan",
             data=st.session_state["tcf1_out_bytes"],
             file_name="TCF-1_3-Day_Plan.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1262,7 +1119,7 @@ if st.session_state.get("plans_generated", False):
         )
     with dl_col2:
         st.download_button(
-            label="📥 Download TCF-2 (Harrier/Safari) 3-Day Plan",
+            label="📥 Download TCF-2 3-Day Plan",
             data=st.session_state["tcf2_out_bytes"],
             file_name="TCF-2_3-Day_Plan.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1270,93 +1127,84 @@ if st.session_state.get("plans_generated", False):
             use_container_width=True
         )
         
+    # Render Planned Vehicle Source Color Counts
     st.markdown('<div class="styled-divider"></div>', unsafe_allow_html=True)
-    
-    # Color-coded source breakdown
     t1 = st.session_state["tcf1_summary"]
     t2 = st.session_state["tcf2_summary"]
-    
     st.markdown(
-        """
-        <div class="tml-card">
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:1.2rem;">
-                <span style="font-size:1.2rem;">🎨</span>
-                <h4 class="section-title">Planned Vehicle Count by Source Type (Color-Coded)</h4>
+        f"""
+        <div class="liquid-glass" style="padding:1.6rem; margin-bottom:1.8rem; border-color:rgba(56,189,248,0.35);">
+            <h4 style="margin:0 0 1.2rem 0; color:#38BDF8; font-size:1.15rem; display:flex; align-items:center; gap:10px;">
+                <span class="glass-pill" style="font-size:1.1rem; padding:4px 10px;">🎨</span> Planned Vehicle Count by Source Type (Color-Coded)
+            </h4>
+            <div style="display:flex; justify-content:space-between; gap:20px; flex-wrap:wrap;">
+                <!-- TCF-1 Column -->
+                <div style="flex:1; min-width:280px; background:color-mix(in srgb, rgba(15,23,42,0.65) 85%, transparent); -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px); border-radius:14px; padding:1.2rem; border:1px solid rgba(255,255,255,0.1); box-shadow:inset 1px 1px 0.5px rgba(255,255,255,0.25);">
+                    <h5 style="margin:0 0 0.8rem 0; color:#90cdf4; font-size:0.95rem; font-weight:700;">TCF-1 (Punch/Altroz)</h5>
+                    <div style="display:flex; flex-direction:column; gap:10px; font-size:0.86rem;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#E2EFDA; margin-right:8px; border:1px solid rgba(0,0,0,0.15); box-shadow:0 0 6px #E2EFDA;"></span>Paint Floor Float (Light Green):</span>
+                            <strong style="color:#f8fafc;">{t1['colors']['light_green']}</strong>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#DDEBF7; margin-right:8px; border:1px solid rgba(0,0,0,0.15); box-shadow:0 0 6px #DDEBF7;"></span>WIP in BIW (Light Blue):</span>
+                            <strong style="color:#f8fafc;">{t1['colors']['light_blue']}</strong>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#FFF2CC; margin-right:8px; border:1px solid rgba(0,0,0,0.15); box-shadow:0 0 6px #FFF2CC;"></span>BIW Plan Loaded (Production Pending) (Light Yellow):</span>
+                            <strong style="color:#f8fafc;">{t1['colors']['light_yellow']}</strong>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#FCE4D6; margin-right:8px; border:1px solid rgba(0,0,0,0.15); box-shadow:0 0 6px #FCE4D6;"></span>Next 3-Days BIW Plan (Light Pink):</span>
+                            <strong style="color:#f8fafc;">{t1['colors']['light_pink']}</strong>
+                        </div>
+                    </div>
+                </div>
+                <!-- TCF-2 Column -->
+                <div style="flex:1; min-width:280px; background:color-mix(in srgb, rgba(15,23,42,0.65) 85%, transparent); -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px); border-radius:14px; padding:1.2rem; border:1px solid rgba(255,255,255,0.1); box-shadow:inset 1px 1px 0.5px rgba(255,255,255,0.25);">
+                    <h5 style="margin:0 0 0.8rem 0; color:#98db9c; font-size:0.95rem; font-weight:700;">TCF-2 (Harrier/Safari)</h5>
+                    <div style="display:flex; flex-direction:column; gap:10px; font-size:0.86rem;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#E2EFDA; margin-right:8px; border:1px solid rgba(0,0,0,0.15); box-shadow:0 0 6px #E2EFDA;"></span>Paint Floor Float (Light Green):</span>
+                            <strong style="color:#f8fafc;">{t2['colors']['light_green']}</strong>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#DDEBF7; margin-right:8px; border:1px solid rgba(0,0,0,0.15); box-shadow:0 0 6px #DDEBF7;"></span>WIP in BIW (Light Blue):</span>
+                            <strong style="color:#f8fafc;">{t2['colors']['light_blue']}</strong>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#FFF2CC; margin-right:8px; border:1px solid rgba(0,0,0,0.15); box-shadow:0 0 6px #FFF2CC;"></span>BIW Plan Loaded (Production Pending) (Light Yellow):</span>
+                            <strong style="color:#f8fafc;">{t2['colors']['light_yellow']}</strong>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#FCE4D6; margin-right:8px; border:1px solid rgba(0,0,0,0.15); box-shadow:0 0 6px #FCE4D6;"></span>Next 3-Days BIW Plan (Light Pink):</span>
+                            <strong style="color:#f8fafc;">{t2['colors']['light_pink']}</strong>
+                        </div>
+                    </div>
+                </div>
             </div>
+        </div>
         """,
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
     
-    sc_c1, sc_c2 = st.columns(2, gap="large")
-    with sc_c1:
-        st.markdown(
-            f"""
-            <div style="background:{'#F8FAFC' if is_light else '#1E293B'}; border:1px solid {'#E2E8F0' if is_light else 'rgba(255,255,255,0.1)'}; border-radius:10px; padding:1.2rem;">
-                <h5 style="margin:0 0 0.8rem 0; color:#0284C7; font-size:0.95rem; font-weight:700;">TCF-1 (Punch/Altroz)</h5>
-                <div style="display:flex; flex-direction:column; gap:10px; font-size:0.86rem;">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#E2EFDA; margin-right:8px; border:1px solid rgba(0,0,0,0.15);"></span>Paint Floor Float (Light Green):</span>
-                        <strong>{t1['colors']['light_green']}</strong>
-                    </div>
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#DDEBF7; margin-right:8px; border:1px solid rgba(0,0,0,0.15);"></span>WIP in BIW (Light Blue):</span>
-                        <strong>{t1['colors']['light_blue']}</strong>
-                    </div>
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#FFF2CC; margin-right:8px; border:1px solid rgba(0,0,0,0.15);"></span>BIW Plan Loaded (Production Pending) (Light Yellow):</span>
-                        <strong>{t1['colors']['light_yellow']}</strong>
-                    </div>
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#FCE4D6; margin-right:8px; border:1px solid rgba(0,0,0,0.15);"></span>Next 3-Days BIW Plan (Light Pink):</span>
-                        <strong>{t1['colors']['light_pink']}</strong>
-                    </div>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-    with sc_c2:
-        st.markdown(
-            f"""
-            <div style="background:{'#F8FAFC' if is_light else '#1E293B'}; border:1px solid {'#E2E8F0' if is_light else 'rgba(255,255,255,0.1)'}; border-radius:10px; padding:1.2rem;">
-                <h5 style="margin:0 0 0.8rem 0; color:#059669; font-size:0.95rem; font-weight:700;">TCF-2 (Harrier/Safari)</h5>
-                <div style="display:flex; flex-direction:column; gap:10px; font-size:0.86rem;">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#E2EFDA; margin-right:8px; border:1px solid rgba(0,0,0,0.15);"></span>Paint Floor Float (Light Green):</span>
-                        <strong>{t2['colors']['light_green']}</strong>
-                    </div>
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#DDEBF7; margin-right:8px; border:1px solid rgba(0,0,0,0.15);"></span>WIP in BIW (Light Blue):</span>
-                        <strong>{t2['colors']['light_blue']}</strong>
-                    </div>
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#FFF2CC; margin-right:8px; border:1px solid rgba(0,0,0,0.15);"></span>BIW Plan Loaded (Production Pending) (Light Yellow):</span>
-                        <strong>{t2['colors']['light_yellow']}</strong>
-                    </div>
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#FCE4D6; margin-right:8px; border:1px solid rgba(0,0,0,0.15);"></span>Next 3-Days BIW Plan (Light Pink):</span>
-                        <strong>{t2['colors']['light_pink']}</strong>
-                    </div>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-    st.markdown("</div>", unsafe_allow_html=True)
-    
-    # 4 Model Summary Cards
+    # Render Planned Models Summary Dashboard
     st.markdown('<div class="styled-divider"></div>', unsafe_allow_html=True)
     st.markdown(
         """
-        <div style="display:flex; align-items:center; gap:8px; margin-bottom:1rem;">
-            <span style="font-size:1.2rem;">📊</span>
-            <h4 class="section-title">Constrained Powertrain &amp; Model Summaries</h4>
+        <div class="liquid-glass" style="padding:1.4rem; margin-bottom:1.8rem; border-color:rgba(16,185,129,0.35); box-shadow: inset 1.5px 1.5px 1px -0.5px rgba(255, 255, 255, 0.4), 0 16px 40px rgba(0,0,0,0.4), 0 0 25px rgba(16,185,129,0.12);">
+            <h4 style="margin:0 0 0.4rem 0; color:#34D399; font-size:1.15rem; display:flex; align-items:center; gap:10px;">
+                <span class="glass-pill" style="font-size:1.1rem; padding:4px 10px;">📊</span> Model Plan Summary (NOVA, CNG, Eturna, TGDI)
+            </h4>
+            <p style="margin:0; font-size:0.85rem; color:#cbd5e1; line-height:1.4;">
+                Highlighting the number of constrained model units planned across yesterday's float drops, today, and the next 3 days.
+            </p>
         </div>
         """,
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
     
-    tcf1_ev = st.session_state.get("tcf1_ev", [160, 160, 160])
+    tcf1_ev = st.session_state.get("tcf1_ev", [160, 90, 160])
     tcf1_cng = st.session_state.get("tcf1_cng", [350, 350, 350])
     tcf2_eturna = st.session_state.get("tcf2_eturna", [120, 120, 120])
     tcf2_tgdi = st.session_state.get("tcf2_tgdi", [40, 40, 40])
@@ -1366,22 +1214,22 @@ if st.session_state.get("plans_generated", False):
     with sum_col1:
         st.markdown(
             f"""
-            <div class="tml-card" style="border-top: 4px solid #0284C7; text-align:center;">
-                <div style="font-size:2rem; margin-bottom:0.2rem;">⚡</div>
-                <h4 style="color:#0284C7; margin:0 0 0.1rem 0; font-size:1.15rem; font-weight:700;">NOVA (Punch EV)</h4>
-                <p style="color:#64748B; font-size:0.75rem; margin:0 0 1rem 0; text-transform:uppercase; letter-spacing:0.06em; font-weight:600;">Daily Targets</p>
-                <div style="background:{'#F8FAFC' if is_light else '#1E293B'}; border-radius:8px; padding:0.8rem; font-size:0.84rem; text-align:left;">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem; border-bottom:1px solid {'#E2E8F0' if is_light else 'rgba(255,255,255,0.1)'}; padding-bottom:0.4rem;">
-                        <span>B&C Drops Today:</span> <strong style="color:#0284C7;">{t1['picked']['nova']}</strong>
+            <div class="liquid-glass" style="border-radius:20px; padding:1.6rem; text-align:center; border-color:rgba(56,189,248,0.35); box-shadow: inset 1.5px 1.5px 1px -0.5px rgba(255,255,255,0.45), inset -1px -1px 1px -0.5px rgba(56,189,248,0.2), 0 16px 40px rgba(0,0,0,0.4), 0 0 24px rgba(56,189,248,0.12);">
+                <div style="font-size:2.5rem; margin-bottom:0.4rem; filter: drop-shadow(0 0 12px rgba(56,189,248,0.5));">⚡</div>
+                <h4 style="color:#38bdf8; margin:0 0 0.2rem 0; font-size:1.25rem; font-weight:700;">NOVA (Punch EV)</h4>
+                <p style="color:#94a3b8; font-size:0.75rem; margin:0 0 1.1rem 0; text-transform:uppercase; letter-spacing:0.06em;">Daily Target Limits</p>
+                <div style="text-align:left; font-size:0.86rem; color:#f1f5f9; background:rgba(0,0,0,0.32); -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:0.9rem; box-shadow:inset 0 2px 6px rgba(0,0,0,0.3);">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:0.4rem;">
+                        <span style="color:#cbd5e1;">B&C Drops Today:</span> <strong style="color:#38bdf8;">{t1['picked']['nova']}</strong>
                     </div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:0.3rem;">
-                        <span>Today (Day 1):</span> <span><strong>{t1['day1']['nova']}</strong> <span style="font-size:0.75rem; color:#64748B;">/ {tcf1_ev[0]}</span></span>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
+                        <span>Today (Day 1):</span> <span><strong>{t1['day1']['nova']}</strong> <span style="color:#94a3b8;font-size:0.75rem;">/ {tcf1_ev[0]}</span></span>
                     </div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:0.3rem;">
-                        <span>Day 2 Plan:</span> <span><strong>{t1['day2']['nova']}</strong> <span style="font-size:0.75rem; color:#64748B;">/ {tcf1_ev[1]}</span></span>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
+                        <span>Day 2 Plan:</span> <span><strong>{t1['day2']['nova']}</strong> <span style="color:#94a3b8;font-size:0.75rem;">/ {tcf1_ev[1]}</span></span>
                     </div>
                     <div style="display:flex; justify-content:space-between;">
-                        <span>Day 3 Plan:</span> <span><strong>{t1['day3']['nova']}</strong> <span style="font-size:0.75rem; color:#64748B;">/ {tcf1_ev[2]}</span></span>
+                        <span>Day 3 Plan:</span> <span><strong>{t1['day3']['nova']}</strong> <span style="color:#94a3b8;font-size:0.75rem;">/ {tcf1_ev[2]}</span></span>
                     </div>
                 </div>
             </div>
@@ -1392,22 +1240,22 @@ if st.session_state.get("plans_generated", False):
     with sum_col2:
         st.markdown(
             f"""
-            <div class="tml-card" style="border-top: 4px solid #EA580C; text-align:center;">
-                <div style="font-size:2rem; margin-bottom:0.2rem;">🔥</div>
-                <h4 style="color:#EA580C; margin:0 0 0.1rem 0; font-size:1.15rem; font-weight:700;">Punch CNG</h4>
-                <p style="color:#64748B; font-size:0.75rem; margin:0 0 1rem 0; text-transform:uppercase; letter-spacing:0.06em; font-weight:600;">Daily Targets</p>
-                <div style="background:{'#F8FAFC' if is_light else '#1E293B'}; border-radius:8px; padding:0.8rem; font-size:0.84rem; text-align:left;">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem; border-bottom:1px solid {'#E2E8F0' if is_light else 'rgba(255,255,255,0.1)'}; padding-bottom:0.4rem;">
-                        <span>B&C Drops Today:</span> <strong style="color:#EA580C;">{t1['picked']['cng']}</strong>
+            <div class="liquid-glass" style="border-radius:20px; padding:1.6rem; text-align:center; border-color:rgba(251,146,60,0.35); box-shadow: inset 1.5px 1.5px 1px -0.5px rgba(255,255,255,0.45), inset -1px -1px 1px -0.5px rgba(251,146,60,0.2), 0 16px 40px rgba(0,0,0,0.4), 0 0 24px rgba(251,146,60,0.12);">
+                <div style="font-size:2.5rem; margin-bottom:0.4rem; filter: drop-shadow(0 0 12px rgba(251,146,60,0.5));">🔥</div>
+                <h4 style="color:#fb923c; margin:0 0 0.2rem 0; font-size:1.25rem; font-weight:700;">Punch CNG</h4>
+                <p style="color:#94a3b8; font-size:0.75rem; margin:0 0 1.1rem 0; text-transform:uppercase; letter-spacing:0.06em;">Daily Target Limits</p>
+                <div style="text-align:left; font-size:0.86rem; color:#f1f5f9; background:rgba(0,0,0,0.32); -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:0.9rem; box-shadow:inset 0 2px 6px rgba(0,0,0,0.3);">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:0.4rem;">
+                        <span style="color:#cbd5e1;">B&C Drops Today:</span> <strong style="color:#fb923c;">{t1['picked']['cng']}</strong>
                     </div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:0.3rem;">
-                        <span>Today (Day 1):</span> <span><strong>{t1['day1']['cng']}</strong> <span style="font-size:0.75rem; color:#64748B;">/ {tcf1_cng[0]}</span></span>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
+                        <span>Today (Day 1):</span> <span><strong>{t1['day1']['cng']}</strong> <span style="color:#94a3b8;font-size:0.75rem;">/ {tcf1_cng[0]}</span></span>
                     </div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:0.3rem;">
-                        <span>Day 2 Plan:</span> <span><strong>{t1['day2']['cng']}</strong> <span style="font-size:0.75rem; color:#64748B;">/ {tcf1_cng[1]}</span></span>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
+                        <span>Day 2 Plan:</span> <span><strong>{t1['day2']['cng']}</strong> <span style="color:#94a3b8;font-size:0.75rem;">/ {tcf1_cng[1]}</span></span>
                     </div>
                     <div style="display:flex; justify-content:space-between;">
-                        <span>Day 3 Plan:</span> <span><strong>{t1['day3']['cng']}</strong> <span style="font-size:0.75rem; color:#64748B;">/ {tcf1_cng[2]}</span></span>
+                        <span>Day 3 Plan:</span> <span><strong>{t1['day3']['cng']}</strong> <span style="color:#94a3b8;font-size:0.75rem;">/ {tcf1_cng[2]}</span></span>
                     </div>
                 </div>
             </div>
@@ -1418,22 +1266,22 @@ if st.session_state.get("plans_generated", False):
     with sum_col3:
         st.markdown(
             f"""
-            <div class="tml-card" style="border-top: 4px solid #059669; text-align:center;">
-                <div style="font-size:2rem; margin-bottom:0.2rem;">🌱</div>
-                <h4 style="color:#059669; margin:0 0 0.1rem 0; font-size:1.15rem; font-weight:700;">Eturna (Harrier EV)</h4>
-                <p style="color:#64748B; font-size:0.75rem; margin:0 0 1rem 0; text-transform:uppercase; letter-spacing:0.06em; font-weight:600;">Daily Targets</p>
-                <div style="background:{'#F8FAFC' if is_light else '#1E293B'}; border-radius:8px; padding:0.8rem; font-size:0.84rem; text-align:left;">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem; border-bottom:1px solid {'#E2E8F0' if is_light else 'rgba(255,255,255,0.1)'}; padding-bottom:0.4rem;">
-                        <span>B&C Drops Today:</span> <strong style="color:#059669;">{t2['picked']['eturna']}</strong>
+            <div class="liquid-glass" style="border-radius:20px; padding:1.6rem; text-align:center; border-color:rgba(52,211,153,0.35); box-shadow: inset 1.5px 1.5px 1px -0.5px rgba(255,255,255,0.45), inset -1px -1px 1px -0.5px rgba(52,211,153,0.2), 0 16px 40px rgba(0,0,0,0.4), 0 0 24px rgba(52,211,153,0.12);">
+                <div style="font-size:2.5rem; margin-bottom:0.4rem; filter: drop-shadow(0 0 12px rgba(52,211,153,0.5));">🌱</div>
+                <h4 style="color:#34d399; margin:0 0 0.2rem 0; font-size:1.25rem; font-weight:700;">Eturna (Harrier EV)</h4>
+                <p style="color:#94a3b8; font-size:0.75rem; margin:0 0 1.1rem 0; text-transform:uppercase; letter-spacing:0.06em;">Daily Target Limits</p>
+                <div style="text-align:left; font-size:0.86rem; color:#f1f5f9; background:rgba(0,0,0,0.32); -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:0.9rem; box-shadow:inset 0 2px 6px rgba(0,0,0,0.3);">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:0.4rem;">
+                        <span style="color:#cbd5e1;">B&C Drops Today:</span> <strong style="color:#34d399;">{t2['picked']['eturna']}</strong>
                     </div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:0.3rem;">
-                        <span>Today (Day 1):</span> <span><strong>{t2['day1']['eturna']}</strong> <span style="font-size:0.75rem; color:#64748B;">/ {tcf2_eturna[0]}</span></span>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
+                        <span>Today (Day 1):</span> <span><strong>{t2['day1']['eturna']}</strong> <span style="color:#94a3b8;font-size:0.75rem;">/ {tcf2_eturna[0]}</span></span>
                     </div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:0.3rem;">
-                        <span>Day 2 Plan:</span> <span><strong>{t2['day2']['eturna']}</strong> <span style="font-size:0.75rem; color:#64748B;">/ {tcf2_eturna[1]}</span></span>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
+                        <span>Day 2 Plan:</span> <span><strong>{t2['day2']['eturna']}</strong> <span style="color:#94a3b8;font-size:0.75rem;">/ {tcf2_eturna[1]}</span></span>
                     </div>
                     <div style="display:flex; justify-content:space-between;">
-                        <span>Day 3 Plan:</span> <span><strong>{t2['day3']['eturna']}</strong> <span style="font-size:0.75rem; color:#64748B;">/ {tcf2_eturna[2]}</span></span>
+                        <span>Day 3 Plan:</span> <span><strong>{t2['day3']['eturna']}</strong> <span style="color:#94a3b8;font-size:0.75rem;">/ {tcf2_eturna[2]}</span></span>
                     </div>
                 </div>
             </div>
@@ -1444,31 +1292,49 @@ if st.session_state.get("plans_generated", False):
     with sum_col4:
         st.markdown(
             f"""
-            <div class="tml-card" style="border-top: 4px solid #7C3AED; text-align:center;">
-                <div style="font-size:2rem; margin-bottom:0.2rem;">🏎️</div>
-                <h4 style="color:#7C3AED; margin:0 0 0.1rem 0; font-size:1.15rem; font-weight:700;">TGDI (Petrol)</h4>
-                <p style="color:#64748B; font-size:0.75rem; margin:0 0 1rem 0; text-transform:uppercase; letter-spacing:0.06em; font-weight:600;">Daily Targets</p>
-                <div style="background:{'#F8FAFC' if is_light else '#1E293B'}; border-radius:8px; padding:0.8rem; font-size:0.84rem; text-align:left;">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem; border-bottom:1px solid {'#E2E8F0' if is_light else 'rgba(255,255,255,0.1)'}; padding-bottom:0.4rem;">
-                        <span>B&C Drops Today:</span> <strong style="color:#7C3AED;">{t2['picked']['tgdi']}</strong>
+            <div class="liquid-glass" style="border-radius:20px; padding:1.6rem; text-align:center; border-color:rgba(192,132,252,0.35); box-shadow: inset 1.5px 1.5px 1px -0.5px rgba(255,255,255,0.45), inset -1px -1px 1px -0.5px rgba(192,132,252,0.2), 0 16px 40px rgba(0,0,0,0.4), 0 0 24px rgba(192,132,252,0.12);">
+                <div style="font-size:2.5rem; margin-bottom:0.4rem; filter: drop-shadow(0 0 12px rgba(192,132,252,0.5));">🏎️</div>
+                <h4 style="color:#c084fc; margin:0 0 0.2rem 0; font-size:1.25rem; font-weight:700;">TGDI (Petrol)</h4>
+                <p style="color:#94a3b8; font-size:0.75rem; margin:0 0 1.1rem 0; text-transform:uppercase; letter-spacing:0.06em;">Daily Target Limits</p>
+                <div style="text-align:left; font-size:0.86rem; color:#f1f5f9; background:rgba(0,0,0,0.32); -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:0.9rem; box-shadow:inset 0 2px 6px rgba(0,0,0,0.3);">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:0.4rem;">
+                        <span style="color:#cbd5e1;">B&C Drops Today:</span> <strong style="color:#c084fc;">{t2['picked']['tgdi']}</strong>
                     </div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:0.3rem;">
-                        <span>Today (Day 1):</span> <span><strong>{t2['day1']['tgdi']}</strong> <span style="font-size:0.75rem; color:#64748B;">/ {tcf2_tgdi[0]}</span></span>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
+                        <span>Today (Day 1):</span> <span><strong>{t2['day1']['tgdi']}</strong> <span style="color:#94a3b8;font-size:0.75rem;">/ {tcf2_tgdi[0]}</span></span>
                     </div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:0.3rem;">
-                        <span>Day 2 Plan:</span> <span><strong>{t2['day2']['tgdi']}</strong> <span style="font-size:0.75rem; color:#64748B;">/ {tcf2_tgdi[1]}</span></span>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
+                        <span>Day 2 Plan:</span> <span><strong>{t2['day2']['tgdi']}</strong> <span style="color:#94a3b8;font-size:0.75rem;">/ {tcf2_tgdi[1]}</span></span>
                     </div>
                     <div style="display:flex; justify-content:space-between;">
-                        <span>Day 3 Plan:</span> <span><strong>{t2['day3']['tgdi']}</strong> <span style="font-size:0.75rem; color:#64748B;">/ {tcf2_tgdi[2]}</span></span>
+                        <span>Day 3 Plan:</span> <span><strong>{t2['day3']['tgdi']}</strong> <span style="color:#94a3b8;font-size:0.75rem;">/ {tcf2_tgdi[2]}</span></span>
                     </div>
                 </div>
             </div>
             """,
             unsafe_allow_html=True
         )
-
-    # Shortage & Production Remarks
+    # ─────────────────────────────────────────────
+    # TARGET SHORTAGE & PRODUCTION REMARKS
+    # ─────────────────────────────────────────────
+    st.markdown('<div class="styled-divider"></div>', unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="liquid-glass" style="padding:1.4rem; margin-bottom:1.8rem; border-color:rgba(239,68,68,0.35); box-shadow: inset 1.5px 1.5px 1px -0.5px rgba(255, 255, 255, 0.4), 0 16px 40px rgba(0,0,0,0.4), 0 0 25px rgba(239,68,68,0.12);">
+            <h4 style="margin:0 0 0.4rem 0; color:#EF4444; font-size:1.15rem; display:flex; align-items:center; gap:10px;">
+                <span class="glass-pill" style="font-size:1.1rem; padding:4px 10px;">⚠️</span> Target Shortage &amp; Production Remarks
+            </h4>
+            <p style="margin:0; font-size:0.85rem; color:#cbd5e1; line-height:1.4;">
+                Generated warnings if available vehicles in float or BIW next 3 days plan fell short of target quantities.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    
     remarks = []
+    
+    # Check TCF-1
     t1_targets = t1.get('targets', {})
     for day_key, day_name in [('day1', 'Day 1 (Today)'), ('day2', 'Day 2'), ('day3', 'Day 3')]:
         t_val = t1_targets.get(day_key, {})
@@ -1482,6 +1348,7 @@ if st.session_state.get("plans_generated", False):
                     shortage = target - planned
                     remarks.append(f"TCF-1 {day_name} - **{label}**: Target was `{target}`, but only `{planned}` vehicles were available (Shortage of `{shortage}`).")
                     
+    # Check TCF-2
     t2_targets = t2.get('targets', {})
     for day_key, day_name in [('day1', 'Day 1 (Today)'), ('day2', 'Day 2'), ('day3', 'Day 3')]:
         t_val = t2_targets.get(day_key, {})
@@ -1496,16 +1363,6 @@ if st.session_state.get("plans_generated", False):
                     remarks.append(f"TCF-2 {day_name} - **{label}**: Target was `{target}`, but only `{planned}` vehicles were available (Shortage of `{shortage}`).")
                     
     if remarks:
-        st.markdown('<div class="styled-divider"></div>', unsafe_allow_html=True)
-        st.markdown(
-            """
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:0.8rem;">
-                <span style="font-size:1.2rem;">⚠️</span>
-                <h4 class="section-title">Target Shortage &amp; Production Remarks</h4>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
         for r_text in remarks:
             st.warning(r_text)
     else:
@@ -1513,7 +1370,7 @@ if st.session_state.get("plans_generated", False):
 
     # Scheduled VCs by Category Summary List
     st.markdown('<div class="styled-divider"></div>', unsafe_allow_html=True)
-    with st.expander("🔍 View Scheduled Vehicle Codes (VCs) by Category", expanded=False):
+    with st.expander("🔍 View Scheduled Vehicle Codes (VCs) by Category", expanded=True):
         tab1, tab2 = st.tabs(["TCF-1 (Punch/Altroz)", "TCF-2 (Harrier/Safari)"])
         
         with tab1:
@@ -1562,20 +1419,14 @@ if st.session_state.get("plans_generated", False):
 
 
 # ─────────────────────────────────────────────
-# 9. VEHICLE SELECTION / INFORMATION CARDS
+# VEHICLE 3D CARDS SHOWCASE
 # ─────────────────────────────────────────────
 harrier_b64 = get_base64_image("assets/images/tata_harrier_3d.png")
 safari_b64 = get_base64_image("assets/images/tata_safari_3d.png")
 punch_b64 = get_base64_image("assets/images/tata_punch_3d.png")
 
-with st.expander("🚗 TML Fleet Overview (Interactive Automotive Cards)", expanded=True):
-    body_color = "#0F172A" if is_light else "#F8FAFC"
-    card_bg = "#FFFFFF" if is_light else "#151E33"
-    card_border = "#E2E8F0" if is_light else "rgba(255, 255, 255, 0.12)"
-    card_shadow = "0 4px 14px rgba(15, 23, 42, 0.06)" if is_light else "0 8px 24px rgba(0, 0, 0, 0.4)"
-    card_title_color = "#002B49" if is_light else "#38BDF8"
-    card_desc_color = "#475569" if is_light else "#CBD5E1"
-
+with st.expander("🚗 TML Fleet Overview (Interactive 3D Cards)", expanded=True):
+    # Constructing HTML for the 3D cards
     cards_html = f"""
     <script src="https://cdnjs.cloudflare.com/ajax/libs/vanilla-tilt/1.8.1/vanilla-tilt.min.js"></script>
     <style>
@@ -1584,7 +1435,7 @@ with st.expander("🚗 TML Fleet Overview (Interactive Automotive Cards)", expan
             padding: 0;
             background: transparent;
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            color: {body_color};
+            color: #e2e8f0;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -1597,133 +1448,154 @@ with st.expander("🚗 TML Fleet Overview (Interactive Automotive Cards)", expan
             flex-wrap: wrap;
             width: 100%;
             max-width: 1200px;
-            padding: 16px;
+            padding: 20px;
             gap: 20px;
         }}
         .card {{
             position: relative;
-            width: 330px;
+            width: 320px;
             height: 380px;
-            background: {card_bg};
-            border: 1px solid {card_border};
-            border-radius: 16px;
+            background: radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.12), transparent 60%),
+                        rgba(18, 24, 40, 0.65);
+            -webkit-backdrop-filter: blur(24px) saturate(190%) brightness(1.08);
+            backdrop-filter: blur(24px) saturate(190%) brightness(1.08);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            border-radius: 24px;
             overflow: hidden;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: flex-end;
-            padding: 24px 20px;
+            padding: 25px 20px;
             box-sizing: border-box;
-            box-shadow: {card_shadow};
-            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow:
+                inset 1.5px 1.5px 1px -0.5px rgba(255, 255, 255, 0.45),
+                inset -1px -1px 1px -0.5px rgba(255, 255, 255, 0.18),
+                inset 0 0 0 0.5px rgba(255, 255, 255, 0.1),
+                0 16px 40px rgba(0, 0, 0, 0.45),
+                inset 0 8px 12px -8px rgba(255, 255, 255, 0.2),
+                inset 0 -8px 12px -8px rgba(0, 0, 0, 0.35);
+            transition: 0.4s cubic-bezier(0.16, 1, 0.3, 1);
             transform-style: preserve-3d;
         }}
         .card:hover {{
-            border-color: #0284C7;
-            box-shadow: 0 12px 30px rgba(2, 132, 199, 0.15);
+            border-color: rgba(99, 179, 237, 0.5);
+            box-shadow:
+                inset 1.5px 1.5px 1.5px -0.5px rgba(255, 255, 255, 0.65),
+                inset -1px -1px 1px -0.5px rgba(255, 255, 255, 0.25),
+                0 25px 60px rgba(0, 0, 0, 0.6),
+                0 0 30px rgba(56, 189, 248, 0.22);
         }}
         .card .img-box {{
             position: absolute;
             top: 20px;
-            width: 290px;
+            width: 280px;
             height: 180px;
             display: flex;
             justify-content: center;
             align-items: center;
-            transform: translateZ(50px);
-            transition: 0.4s;
+            transform: translateZ(60px);
+            transition: 0.5s;
         }}
         .card .img-box img {{
-            max-width: 92%;
-            max-height: 92%;
+            max-width: 90%;
+            max-height: 90%;
             object-fit: contain;
-            filter: drop-shadow(0 10px 15px rgba(0, 0, 0, 0.2));
+            filter: drop-shadow(0 15px 15px rgba(0, 0, 0, 0.6));
         }}
         .card .content-box {{
             text-align: center;
-            transform: translateZ(25px);
+            transform: translateZ(30px);
             z-index: 10;
         }}
         .card .content-box h2 {{
-            font-size: 1.25rem;
-            font-weight: 800;
+            font-size: 1.3rem;
+            font-weight: 700;
             margin: 0;
-            color: {card_title_color};
-            letter-spacing: 0.3px;
+            color: #fff;
+            letter-spacing: 0.5px;
         }}
         .card .content-box p {{
             font-size: 0.8rem;
-            color: {card_desc_color};
-            margin: 8px 0 0 0;
-            line-height: 1.45;
+            color: #cbd5e1;
+            margin: 10px 0 0 0;
+            line-height: 1.4;
         }}
         .card .badge {{
             display: inline-block;
-            padding: 4px 12px;
+            padding: 5px 14px;
             border-radius: 9999px;
             font-size: 0.72rem;
             font-weight: 700;
-            margin-top: 14px;
+            margin-top: 15px;
             text-transform: uppercase;
-            letter-spacing: 0.8px;
+            letter-spacing: 1px;
+            backdrop-filter: blur(10px);
+            box-shadow: inset 1px 1px 0.5px rgba(255, 255, 255, 0.3);
         }}
-        .tcf2-badge {{
-            background: #EDE9FE;
-            color: #5B21B6;
-            border: 1px solid #DDD6FE;
+        .harrier-badge {{
+            background: rgba(99, 179, 237, 0.12);
+            color: #63b3ed;
+            border: 1px solid rgba(99, 179, 237, 0.25);
         }}
-        .tcf1-badge {{
-            background: #E0F2FE;
-            color: #0369A1;
-            border: 1px solid #BAE6FD;
+        .safari-badge {{
+            background: rgba(237, 137, 54, 0.12);
+            color: #ed8936;
+            border: 1px solid rgba(237, 137, 54, 0.25);
+        }}
+        .punch-badge {{
+            background: rgba(72, 187, 120, 0.12);
+            color: #48bb78;
+            border: 1px solid rgba(72, 187, 120, 0.25);
         }}
     </style>
     <div class="container">
         <!-- Harrier Card -->
-        <div class="card" data-tilt data-tilt-max="12" data-tilt-speed="400" data-tilt-perspective="1000">
+        <div class="card" data-tilt data-tilt-max="15" data-tilt-speed="400" data-tilt-perspective="1000">
             <div class="img-box">
                 <img src="data:image/png;base64,{harrier_b64}" alt="Tata Harrier">
             </div>
             <div class="content-box">
                 <h2>TATA HARRIER</h2>
-                <p>Premium 5-Seater SUV built on the OMEGA Arc platform. Renowned for dynamic driving performance and bold stance.</p>
-                <span class="badge tcf2-badge">TCF 2 Track</span>
+                <p>Premium 5-Seater SUV Built on the OMEGA Arc platform. Known for its dynamic driving performance and bold stance.</p>
+                <span class="badge harrier-badge">TCF 2 Track</span>
             </div>
         </div>
         <!-- Safari Card -->
-        <div class="card" data-tilt data-tilt-max="12" data-tilt-speed="400" data-tilt-perspective="1000">
+        <div class="card" data-tilt data-tilt-max="15" data-tilt-speed="400" data-tilt-perspective="1000">
             <div class="img-box">
                 <img src="data:image/png;base64,{safari_b64}" alt="Tata Safari">
             </div>
             <div class="content-box">
                 <h2>TATA SAFARI</h2>
-                <p>Flagship 7-Seater SUV offering executive comfort, advanced tech, and commanding road presence.</p>
-                <span class="badge tcf2-badge">TCF 2 Track</span>
+                <p>Flagship 7-Seater SUV offering premium comfort, advanced features, and a commanding road presence.</p>
+                <span class="badge safari-badge">TCF 2 Track</span>
             </div>
         </div>
         <!-- Punch Card -->
-        <div class="card" data-tilt data-tilt-max="12" data-tilt-speed="400" data-tilt-perspective="1000">
+        <div class="card" data-tilt data-tilt-max="15" data-tilt-speed="400" data-tilt-perspective="1000">
             <div class="img-box">
                 <img src="data:image/png;base64,{punch_b64}" alt="Tata Punch">
             </div>
             <div class="content-box">
                 <h2>TATA PUNCH</h2>
-                <p>Sub-compact SUV combining agile dimensions, 5-star safety rating, and tough SUV character.</p>
-                <span class="badge tcf1-badge">TCF 1 Track</span>
+                <p>Sub-compact SUV combining compact dimensions with tough SUV character, high safety ratings, and agility.</p>
+                <span class="badge punch-badge">TCF 1 Track</span>
             </div>
         </div>
     </div>
     """
-    st.components.v1.html(cards_html, height=410)
+    st.components.v1.html(cards_html, height=420)
+
 
 # ─────────────────────────────────────────────
 # FOOTER
 # ─────────────────────────────────────────────
 st.markdown(
     """
-    <div style="margin-top: 3rem; padding: 1.5rem 0; border-top: 1px solid #E2E8F0; text-align: center; color: #64748B; font-size: 0.78rem;">
-        <strong>Tata Motors Limited</strong> &nbsp;·&nbsp; VIN Generation &amp; Production Planning Dashboard &nbsp;·&nbsp;
-        For Internal Manufacturing Operations Use Only
+    <div style="margin-top: 3rem; text-align: center; color: #4a5568; font-size: 0.75rem;">
+        TML VIN Generation Plan &nbsp;·&nbsp; Phase 1: Data Input &nbsp;·&nbsp;
+        For internal production planning use only
     </div>
     """,
     unsafe_allow_html=True,
