@@ -185,7 +185,7 @@ def initialize_tcf1_workbook(file_path_or_stream):
         if isinstance(start_date, datetime.datetime):
             start_date = start_date.date()
             
-        def get_next_planning_days_t1(s_date, count=4):
+        def get_next_planning_days_t1(s_date, count=3):
             days = []
             curr = s_date
             while len(days) < count:
@@ -196,11 +196,11 @@ def initialize_tcf1_workbook(file_path_or_stream):
             return days
             
         if start_date is not None and not isinstance(start_date, str):
-            planning_days = get_next_planning_days_t1(start_date, 4)
+            planning_days = get_next_planning_days_t1(start_date, 3)
             ws.cell(row=2, column=8).value = planning_days[0]
             ws.cell(row=2, column=9).value = planning_days[1]
             ws.cell(row=2, column=10).value = planning_days[2]
-            ws.cell(row=2, column=11).value = planning_days[3]
+            ws.cell(row=2, column=11).value = None
         
         # Row-agnostic copy range
         for row in range(4, ws.max_row + 1):
@@ -290,7 +290,7 @@ def initialize_tcf2_workbook(file_path_or_stream):
         if isinstance(start_date, datetime.datetime):
             start_date = start_date.date()
             
-        def get_next_planning_days_t2(s_date, count=4):
+        def get_next_planning_days_t2(s_date, count=3):
             days = []
             curr = s_date
             while len(days) < count:
@@ -301,11 +301,11 @@ def initialize_tcf2_workbook(file_path_or_stream):
             return days
             
         if start_date is not None and not isinstance(start_date, str):
-            planning_days = get_next_planning_days_t2(start_date, 4)
+            planning_days = get_next_planning_days_t2(start_date, 3)
             ws.cell(row=2, column=9).value = planning_days[0]
             ws.cell(row=2, column=10).value = planning_days[1]
             ws.cell(row=2, column=11).value = planning_days[2]
-            ws.cell(row=2, column=12).value = planning_days[3] # Column L
+            ws.cell(row=2, column=12).value = None # Clear Day 4
         
         # Row-agnostic copy range
         for row in range(4, ws.max_row + 1):
@@ -1123,27 +1123,27 @@ def update_paint_float_data(wb, paint_float_file_or_stream, track, expected_qty=
     
     is_tcf1 = (track == 'TCF1')
     if daily_capacities is None:
-        caps = [900, 900, 900, 900] if is_tcf1 else [250, 250, 250, 250]
+        caps = [900, 900, 900] if is_tcf1 else [250, 250, 250]
     else:
-        caps = list(daily_capacities)
-        expected_len = 4
+        caps = list(daily_capacities)[:3]
+        expected_len = 3
         while len(caps) < expected_len:
             caps.append(900 if is_tcf1 else 250)
             
     if sub_limits_1 is None:
-        lim1 = [160, 160, 160, 160] if is_tcf1 else [120, 120, 120, 120]
+        lim1 = [160, 160, 160] if is_tcf1 else [120, 120, 120]
     else:
-        lim1 = list(sub_limits_1)
-        expected_len = 4
+        lim1 = list(sub_limits_1)[:3]
+        expected_len = 3
         def_lim1 = 160 if is_tcf1 else 120
         while len(lim1) < expected_len:
             lim1.append(def_lim1)
             
     if sub_limits_2 is None:
-        lim2 = [350, 350, 350, 350] if is_tcf1 else [40, 40, 40, 40]
+        lim2 = [350, 350, 350] if is_tcf1 else [40, 40, 40]
     else:
-        lim2 = list(sub_limits_2)
-        expected_len = 4
+        lim2 = list(sub_limits_2)[:3]
+        expected_len = 3
         def_lim2 = 350 if is_tcf1 else 40
         while len(lim2) < expected_len:
             lim2.append(def_lim2)
@@ -1151,9 +1151,8 @@ def update_paint_float_data(wb, paint_float_file_or_stream, track, expected_qty=
     day1_list, remaining_queue, d1_c1, d1_c2 = build_day_sequence(indexed_master_queue, caps[0], lim1[0], lim2[0], is_tcf1)
     day2_list, remaining_queue, d2_c1, d2_c2 = build_day_sequence(remaining_queue, caps[1], lim1[1], lim2[1], is_tcf1)
     day3_list, remaining_queue, d3_c1, d3_c2 = build_day_sequence(remaining_queue, caps[2], lim1[2], lim2[2], is_tcf1)
-    day4_list, remaining_queue, d4_c1, d4_c2 = build_day_sequence(remaining_queue, caps[3], lim1[3], lim2[3], is_tcf1)
         
-    all_planned_items = day1_list + day2_list + day3_list + day4_list
+    all_planned_items = day1_list + day2_list + day3_list
     color_counts = {
         'light_green': 0,
         'light_blue': 0,
@@ -1179,12 +1178,10 @@ def update_paint_float_data(wb, paint_float_file_or_stream, track, expected_qty=
             'day1': {'nova': d1_c1, 'cng': d1_c2, 'eturna': 0, 'tgdi': 0},
             'day2': {'nova': d2_c1, 'cng': d2_c2, 'eturna': 0, 'tgdi': 0},
             'day3': {'nova': d3_c1, 'cng': d3_c2, 'eturna': 0, 'tgdi': 0},
-            'day4': {'nova': d4_c1, 'cng': d4_c2, 'eturna': 0, 'tgdi': 0},
             'targets': {
                 'day1': {'nova': lim1[0], 'cng': lim2[0], 'eturna': 0, 'tgdi': 0},
                 'day2': {'nova': lim1[1], 'cng': lim2[1], 'eturna': 0, 'tgdi': 0},
                 'day3': {'nova': lim1[2], 'cng': lim2[2], 'eturna': 0, 'tgdi': 0},
-                'day4': {'nova': lim1[3], 'cng': lim2[3], 'eturna': 0, 'tgdi': 0},
             },
             'colors': color_counts,
             'vc_lists': vc_lists
@@ -1195,12 +1192,10 @@ def update_paint_float_data(wb, paint_float_file_or_stream, track, expected_qty=
             'day1': {'nova': 0, 'cng': 0, 'eturna': d1_c1, 'tgdi': d1_c2},
             'day2': {'nova': 0, 'cng': 0, 'eturna': d2_c1, 'tgdi': d2_c2},
             'day3': {'nova': 0, 'cng': 0, 'eturna': d3_c1, 'tgdi': d3_c2},
-            'day4': {'nova': 0, 'cng': 0, 'eturna': d4_c1, 'tgdi': d4_c2},
             'targets': {
                 'day1': {'nova': 0, 'cng': 0, 'eturna': lim1[0], 'tgdi': lim2[0]},
                 'day2': {'nova': 0, 'cng': 0, 'eturna': lim1[1], 'tgdi': lim2[1]},
                 'day3': {'nova': 0, 'cng': 0, 'eturna': lim1[2], 'tgdi': lim2[2]},
-                'day4': {'nova': 0, 'cng': 0, 'eturna': lim1[3], 'tgdi': lim2[3]},
             },
             'colors': color_counts,
             'vc_lists': vc_lists
@@ -1228,7 +1223,7 @@ def update_paint_float_data(wb, paint_float_file_or_stream, track, expected_qty=
             if color_key in fills:
                 day1_ws.cell(row=row_idx, column=2).fill = fills[color_key]
                 
-    # Write Day 2, Day 3, Day 4 to biw Next 2 days sheet
+    # Write Day 2, Day 3 to biw Next 2 days sheet
     if 'biw Next 2 days' in wb.sheetnames:
         biw_ws = wb['biw Next 2 days']
         # Day 2 -> B (2)
@@ -1251,14 +1246,4 @@ def update_paint_float_data(wb, paint_float_file_or_stream, track, expected_qty=
                     biw_ws.cell(row=row_idx, column=1).value = idx + 1
                 if color_key in fills:
                     biw_ws.cell(row=row_idx, column=3).fill = fills[color_key]
-        # Day 4 -> D (4)
-        for idx, item in enumerate(day4_list):
-            vc, color_key = item
-            row_idx = idx + 2
-            if row_idx <= biw_ws.max_row:
-                biw_ws.cell(row=row_idx, column=4).value = vc
-                if biw_ws.cell(row=row_idx, column=1).value is None:
-                    biw_ws.cell(row=row_idx, column=1).value = idx + 1
-                if color_key in fills:
-                    biw_ws.cell(row=row_idx, column=4).fill = fills[color_key]
     return wb

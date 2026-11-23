@@ -762,7 +762,7 @@ if baseline_date is None:
 elif isinstance(baseline_date, datetime.datetime):
     baseline_date = baseline_date.date()
 
-def get_next_planning_days(start_date, count=4):
+def get_next_planning_days(start_date, count=3):
     days = []
     curr = start_date
     while len(days) < count:
@@ -772,13 +772,12 @@ def get_next_planning_days(start_date, count=4):
         days.append(curr)
     return days
 
-planning_days = get_next_planning_days(baseline_date, 4)
-d1, d2, d3, d4 = planning_days
+planning_days = get_next_planning_days(baseline_date, 3)
+d1, d2, d3 = planning_days
 
 d1_str = d1.strftime('%Y-%m-%d (%A)')
 d2_str = d2.strftime('%Y-%m-%d (%A)')
 d3_str = d3.strftime('%Y-%m-%d (%A)')
-d4_str = d4.strftime('%Y-%m-%d (%A)')
 
 cap_col1, cap_col2 = st.columns(2, gap="large")
 
@@ -792,8 +791,7 @@ with cap_col1:
     for idx, (day_num, def_total, def_ev, def_cng) in enumerate([
         ("1", 900, 160, 350),
         ("2", 900, 160, 350),
-        ("3", 900, 160, 350),
-        ("4", 900, 160, 350)
+        ("3", 900, 160, 350)
     ]):
         st.markdown(f"**Day- {day_num}**")
         sc1, sc2, sc3, sc4 = st.columns(4)
@@ -827,8 +825,7 @@ with cap_col2:
     for idx, (day_num, def_total, def_ev, def_tgdi) in enumerate([
         ("1", 250, 120, 40),
         ("2", 250, 120, 40),
-        ("3", 250, 120, 40),
-        ("4", 250, 120, 40)
+        ("3", 250, 120, 40)
     ]):
         st.markdown(f"**Day- {day_num}**")
         sc1, sc2, sc3, sc4 = st.columns(4)
@@ -906,9 +903,9 @@ if generate_clicked:
             if x1_biw_wip is not None:
                 tcf1_wip_files.append(x1_biw_wip)
                 
-            tcf1_capacities = st.session_state.get("tcf1_capacities", [900, 900, 900, 900])
-            tcf1_ev = st.session_state.get("tcf1_ev", [160, 160, 160, 160])
-            tcf1_cng = st.session_state.get("tcf1_cng", [350, 350, 350, 350])
+            tcf1_capacities = st.session_state.get("tcf1_capacities", [900, 900, 900])
+            tcf1_ev = st.session_state.get("tcf1_ev", [160, 160, 160])
+            tcf1_cng = st.session_state.get("tcf1_cng", [350, 350, 350])
             tcf1_wb = update_paint_float_data(
                 tcf1_wb, paint_float, "TCF1", 
                 expected_qty=expected_qty_tcf1,
@@ -933,9 +930,9 @@ if generate_clicked:
             if wip_q5 is not None:
                 tcf2_wip_files.append(wip_q5)
                 
-            tcf2_capacities = st.session_state.get("tcf2_capacities", [250, 250, 250, 250])
-            tcf2_eturna = st.session_state.get("tcf2_eturna", [120, 120, 120, 120])
-            tcf2_tgdi = st.session_state.get("tcf2_tgdi", [40, 40, 40, 40])
+            tcf2_capacities = st.session_state.get("tcf2_capacities", [250, 250, 250])
+            tcf2_eturna = st.session_state.get("tcf2_eturna", [120, 120, 120])
+            tcf2_tgdi = st.session_state.get("tcf2_tgdi", [40, 40, 40])
             tcf2_wb = update_paint_float_data(
                 tcf2_wb, paint_float, "TCF2", 
                 expected_qty=expected_qty_tcf2,
@@ -967,15 +964,15 @@ if generate_clicked:
 # Render generated output dashboards if state is set
 if st.session_state.get("plans_generated", False):
     
-    tcf1_caps = st.session_state.get("tcf1_capacities", [900, 900, 900, 900])
-    tcf2_caps = st.session_state.get("tcf2_capacities", [250, 250, 250, 250])
+    tcf1_caps = st.session_state.get("tcf1_capacities", [900, 900, 900])
+    tcf2_caps = st.session_state.get("tcf2_capacities", [250, 250, 250])
     tcf1_cap_strs = [f"{cap} (Holiday)" if cap == 0 else str(cap) for cap in tcf1_caps]
     tcf2_cap_strs = [f"{cap} (Holiday)" if cap == 0 else str(cap) for cap in tcf2_caps]
     
     st.success(
         f"✅  **Production Plans generated successfully!**\n\n"
-        f"- TCF-1 (Punch/Altroz): Day 1 Capacity: `{tcf1_cap_strs[0]}`, Day 2: `{tcf1_cap_strs[1]}`, Day 3: `{tcf1_cap_strs[2]}`, Day 4: `{tcf1_cap_strs[3]}`.\n"
-        f"- TCF-2 (Harrier/Safari): Day 1 Capacity: `{tcf2_cap_strs[0]}`, Day 2: `{tcf2_cap_strs[1]}`, Day 3: `{tcf2_cap_strs[2]}`, Day 4: `{tcf2_cap_strs[3]}`.",
+        f"- TCF-1 (Punch/Altroz): Day 1 Capacity: `{tcf1_cap_strs[0]}`, Day 2: `{tcf1_cap_strs[1]}`, Day 3: `{tcf1_cap_strs[2]}`.\n"
+        f"- TCF-2 (Harrier/Safari): Day 1 Capacity: `{tcf2_cap_strs[0]}`, Day 2: `{tcf2_cap_strs[1]}`, Day 3: `{tcf2_cap_strs[2]}`.",
         icon="✅"
     )
     
@@ -1076,10 +1073,10 @@ if st.session_state.get("plans_generated", False):
         unsafe_allow_html=True,
     )
     
-    tcf1_ev = st.session_state.get("tcf1_ev", [160, 90, 160, 150])
-    tcf1_cng = st.session_state.get("tcf1_cng", [350, 350, 350, 350])
-    tcf2_eturna = st.session_state.get("tcf2_eturna", [120, 120, 120, 120])
-    tcf2_tgdi = st.session_state.get("tcf2_tgdi", [40, 40, 40, 40])
+    tcf1_ev = st.session_state.get("tcf1_ev", [160, 90, 160])
+    tcf1_cng = st.session_state.get("tcf1_cng", [350, 350, 350])
+    tcf2_eturna = st.session_state.get("tcf2_eturna", [120, 120, 120])
+    tcf2_tgdi = st.session_state.get("tcf2_tgdi", [40, 40, 40])
 
     sum_col1, sum_col2, sum_col3, sum_col4 = st.columns(4, gap="large")
     
@@ -1100,11 +1097,8 @@ if st.session_state.get("plans_generated", False):
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
                         <span>Day 2 Plan:</span> <span><strong>{t1['day2']['nova']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ {tcf1_ev[1]}</span></span>
                     </div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
-                        <span>Day 3 Plan:</span> <span><strong>{t1['day3']['nova']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ {tcf1_ev[2]}</span></span>
-                    </div>
                     <div style="display:flex; justify-content:space-between;">
-                        <span>Day 4 Plan:</span> <span><strong>{t1['day4']['nova']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ {tcf1_ev[3]}</span></span>
+                        <span>Day 3 Plan:</span> <span><strong>{t1['day3']['nova']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ {tcf1_ev[2]}</span></span>
                     </div>
                 </div>
             </div>
@@ -1129,11 +1123,8 @@ if st.session_state.get("plans_generated", False):
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
                         <span>Day 2 Plan:</span> <span><strong>{t1['day2']['cng']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ {tcf1_cng[1]}</span></span>
                     </div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
-                        <span>Day 3 Plan:</span> <span><strong>{t1['day3']['cng']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ {tcf1_cng[2]}</span></span>
-                    </div>
                     <div style="display:flex; justify-content:space-between;">
-                        <span>Day 4 Plan:</span> <span><strong>{t1['day4']['cng']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ {tcf1_cng[3]}</span></span>
+                        <span>Day 3 Plan:</span> <span><strong>{t1['day3']['cng']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ {tcf1_cng[2]}</span></span>
                     </div>
                 </div>
             </div>
@@ -1158,11 +1149,8 @@ if st.session_state.get("plans_generated", False):
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
                         <span>Day 2 Plan:</span> <span><strong>{t2['day2']['eturna']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ {tcf2_eturna[1]}</span></span>
                     </div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
-                        <span>Day 3 Plan:</span> <span><strong>{t2['day3']['eturna']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ {tcf2_eturna[2]}</span></span>
-                    </div>
                     <div style="display:flex; justify-content:space-between;">
-                        <span>Day 4 Plan:</span> <span><strong>{t2['day4']['eturna']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ {tcf2_eturna[3]}</span></span>
+                        <span>Day 3 Plan:</span> <span><strong>{t2['day3']['eturna']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ {tcf2_eturna[2]}</span></span>
                     </div>
                 </div>
             </div>
@@ -1187,11 +1175,8 @@ if st.session_state.get("plans_generated", False):
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
                         <span>Day 2 Plan:</span> <span><strong>{t2['day2']['tgdi']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ {tcf2_tgdi[1]}</span></span>
                     </div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
-                        <span>Day 3 Plan:</span> <span><strong>{t2['day3']['tgdi']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ {tcf2_tgdi[2]}</span></span>
-                    </div>
                     <div style="display:flex; justify-content:space-between;">
-                        <span>Day 4 Plan:</span> <span><strong>{t2['day4']['tgdi']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ {tcf2_tgdi[3]}</span></span>
+                        <span>Day 3 Plan:</span> <span><strong>{t2['day3']['tgdi']}</strong> <span style="color:#a0aec0;font-size:0.75rem;">/ {tcf2_tgdi[2]}</span></span>
                     </div>
                 </div>
             </div>
@@ -1220,10 +1205,10 @@ if st.session_state.get("plans_generated", False):
     
     # Check TCF-1
     t1_targets = t1.get('targets', {})
-    for day_key, day_name in [('day1', 'Day 1 (Today)'), ('day2', 'Day 2'), ('day3', 'Day 3'), ('day4', 'Day 4')]:
+    for day_key, day_name in [('day1', 'Day 1 (Today)'), ('day2', 'Day 2'), ('day3', 'Day 3')]:
         t_val = t1_targets.get(day_key, {})
         p_val = t1.get(day_key, {})
-        day_cap = st.session_state.get("tcf1_capacities", [900, 900, 900, 900])[int(day_key[-1]) - 1]
+        day_cap = st.session_state.get("tcf1_capacities", [900, 900, 900])[int(day_key[-1]) - 1]
         if day_cap > 0:
             for variant, label in [('nova', 'Punch EV'), ('cng', 'Punch CNG')]:
                 target = t_val.get(variant, 0)
@@ -1234,10 +1219,10 @@ if st.session_state.get("plans_generated", False):
                     
     # Check TCF-2
     t2_targets = t2.get('targets', {})
-    for day_key, day_name in [('day1', 'Day 1 (Today)'), ('day2', 'Day 2'), ('day3', 'Day 3'), ('day4', 'Day 4')]:
+    for day_key, day_name in [('day1', 'Day 1 (Today)'), ('day2', 'Day 2'), ('day3', 'Day 3')]:
         t_val = t2_targets.get(day_key, {})
         p_val = t2.get(day_key, {})
-        day_cap = st.session_state.get("tcf2_capacities", [250, 250, 250, 250])[int(day_key[-1]) - 1]
+        day_cap = st.session_state.get("tcf2_capacities", [250, 250, 250])[int(day_key[-1]) - 1]
         if day_cap > 0:
             for variant, label in [('eturna', 'Eturna EV'), ('tgdi', 'TGDI Petrol')]:
                 target = t_val.get(variant, 0)
