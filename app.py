@@ -24,6 +24,30 @@ st.set_page_config(
 )
 
 # ─────────────────────────────────────────────
+# THEME STATE & CONTROLLER
+# ─────────────────────────────────────────────
+if "theme" not in st.session_state:
+    st.session_state["theme"] = "dark" # Default theme is dark
+
+# Top navigation header with Theme Switcher
+theme_col_left, theme_col_right = st.columns([7, 1])
+with theme_col_right:
+    theme_choice = st.segmented_control(
+        "Dashboard Theme",
+        options=["🌙 Dark", "☀️ Light"],
+        default="🌙 Dark" if st.session_state["theme"] == "dark" else "☀️ Light",
+        label_visibility="collapsed",
+        key="app_theme_switcher"
+    )
+    if theme_choice is not None:
+        target_theme = "light" if "Light" in theme_choice else "dark"
+        if target_theme != st.session_state["theme"]:
+            st.session_state["theme"] = target_theme
+            st.rerun()
+
+is_light = (st.session_state.get("theme", "dark") == "light")
+
+# ─────────────────────────────────────────────
 # CUSTOM CSS — Glasswork Liquid Glass Dark Theme
 # ─────────────────────────────────────────────
 st.markdown(
@@ -380,12 +404,221 @@ st.markdown(
         box-shadow: 0 0 8px #f87171; 
     }
 
+    /* ── Metric Inner Box ── */
+    .glass-metric-inner {
+        text-align: left;
+        font-size: 0.86rem;
+        color: #f1f5f9;
+        background: rgba(0, 0, 0, 0.32);
+        -webkit-backdrop-filter: blur(10px);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        padding: 0.9rem;
+        box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.3);
+    }
+
     footer { visibility: hidden; }
     #MainMenu { visibility: hidden; }
     </style>
     """,
     unsafe_allow_html=True,
 )
+
+# ─────────────────────────────────────────────
+# LIGHT MODE CSS OVERRIDES (Activated on Toggle)
+# ─────────────────────────────────────────────
+if is_light:
+    st.markdown(
+        """
+        <style>
+        /* ── Light Mode Ambient Backdrop ── */
+        .stApp {
+            background: 
+                radial-gradient(ellipse 80% 50% at 50% -10%, rgba(56, 189, 248, 0.16), transparent 70%),
+                radial-gradient(ellipse 60% 40% at 85% 60%, rgba(16, 185, 129, 0.12), transparent 60%),
+                radial-gradient(ellipse 60% 40% at 15% 85%, rgba(99, 102, 241, 0.10), transparent 60%),
+                linear-gradient(155deg, #f8fafc 0%, #edf2f7 50%, #e2e8f0 100%) !important;
+            background-attachment: fixed !important;
+            color: #0f172a !important;
+        }
+
+        /* ── Light Mode Glasswork Liquid Glass Slabs ── */
+        .liquid-glass {
+            background: color-mix(in srgb, rgba(255, 255, 255, 0.72) 85%, transparent) !important;
+            -webkit-backdrop-filter: blur(20px) saturate(180%) brightness(1.04) !important;
+            backdrop-filter: blur(20px) saturate(180%) brightness(1.04) !important;
+            border: 1px solid rgba(255, 255, 255, 0.9) !important;
+            box-shadow:
+                inset 1.5px 1.5px 1px -0.5px rgba(255, 255, 255, 0.95),
+                inset -1px -1px 1px -0.5px rgba(0, 0, 0, 0.04),
+                inset 0 0 0 0.5px rgba(255, 255, 255, 0.7),
+                0 12px 32px rgba(15, 23, 42, 0.08),
+                inset 0 6px 10px -6px rgba(255, 255, 255, 0.5),
+                inset 0 -6px 8px -6px rgba(0, 0, 0, 0.04) !important;
+            color: #0f172a !important;
+        }
+
+        .liquid-glass:hover {
+            border-color: rgba(56, 189, 248, 0.5) !important;
+            box-shadow:
+                inset 1.5px 1.5px 1.5px -0.5px rgba(255, 255, 255, 1),
+                0 16px 40px rgba(15, 23, 42, 0.12),
+                0 0 20px rgba(56, 189, 248, 0.15) !important;
+        }
+
+        /* ── Light Mode Glass Pills ── */
+        .glass-pill {
+            background: color-mix(in srgb, rgba(255, 255, 255, 0.82) 90%, transparent) !important;
+            border: 1px solid rgba(255, 255, 255, 0.95) !important;
+            box-shadow:
+                inset 1px 1px 0.5px rgba(255, 255, 255, 0.95),
+                0 2px 8px rgba(15, 23, 42, 0.06) !important;
+            color: #0f172a !important;
+        }
+
+        /* ── Hero Banner Light Deck ── */
+        .hero-banner {
+            background: 
+                radial-gradient(circle at 10% 20%, rgba(56, 189, 248, 0.14), transparent 45%), 
+                radial-gradient(circle at 90% 80%, rgba(16, 185, 129, 0.10), transparent 45%),
+                color-mix(in srgb, rgba(255, 255, 255, 0.78) 85%, transparent) !important;
+            border: 1px solid rgba(255, 255, 255, 0.95) !important;
+            box-shadow:
+                inset 1.5px 1.5px 1px -0.5px rgba(255, 255, 255, 0.95),
+                inset -1.5px -1.5px 1px -0.5px rgba(0, 0, 0, 0.03),
+                0 16px 45px rgba(15, 23, 42, 0.08) !important;
+        }
+        .hero-title {
+            background: linear-gradient(135deg, #0284c7 0%, #2563eb 50%, #059669 100%) !important;
+            -webkit-background-clip: text !important;
+            -webkit-text-fill-color: transparent !important;
+        }
+        .hero-badge {
+            background: color-mix(in srgb, rgba(56, 189, 248, 0.15) 85%, transparent) !important;
+            border: 1px solid rgba(56, 189, 248, 0.4) !important;
+            color: #0284c7 !important;
+            box-shadow: inset 1px 1px 0.5px rgba(255, 255, 255, 0.8), 0 2px 8px rgba(56, 189, 248, 0.15) !important;
+        }
+        .hero-description {
+            color: #334155 !important;
+        }
+        .hero-feature-item {
+            color: #475569 !important;
+        }
+
+        /* ── Section Labels & Subtitles ── */
+        .section-title {
+            color: #0f172a !important;
+        }
+        .section-subtitle {
+            color: #64748b !important;
+        }
+        .section-icon {
+            background: color-mix(in srgb, rgba(56, 189, 248, 0.18) 85%, transparent) !important;
+            border-color: rgba(56, 189, 248, 0.35) !important;
+            box-shadow: inset 1px 1px 0.5px rgba(255, 255, 255, 0.8) !important;
+        }
+
+        /* ── Upload Card & Dropzone (Light Mode) ── */
+        .upload-card {
+            background: color-mix(in srgb, rgba(255, 255, 255, 0.72) 85%, transparent) !important;
+            border: 1px solid rgba(255, 255, 255, 0.85) !important;
+            box-shadow:
+                inset 1.5px 1.5px 1px -0.5px rgba(255, 255, 255, 0.95),
+                0 8px 24px rgba(15, 23, 42, 0.06) !important;
+        }
+        .upload-card:hover {
+            border-color: rgba(56, 189, 248, 0.5) !important;
+            box-shadow:
+                inset 1.5px 1.5px 1.5px -0.5px rgba(255, 255, 255, 1),
+                0 12px 30px rgba(15, 23, 42, 0.1) !important;
+        }
+        .upload-label {
+            color: #1e293b !important;
+        }
+
+        div[data-testid="stFileUploader"] {
+            background: color-mix(in srgb, rgba(255, 255, 255, 0.72) 85%, transparent) !important;
+            border: 1px solid rgba(255, 255, 255, 0.85) !important;
+            box-shadow:
+                inset 1.5px 1.5px 1px -0.5px rgba(255, 255, 255, 0.95),
+                0 8px 24px rgba(15, 23, 42, 0.06) !important;
+        }
+        div[data-testid="stFileUploader"] label {
+            color: #0f172a !important;
+        }
+        div[data-testid="stFileUploaderDropzone"] {
+            background: rgba(255, 255, 255, 0.6) !important;
+            border: 1.5px dashed rgba(100, 116, 139, 0.35) !important;
+            box-shadow: inset 0 2px 6px rgba(15, 23, 42, 0.04) !important;
+        }
+        div[data-testid="stFileUploaderDropzone"]:hover {
+            border-color: rgba(2, 132, 199, 0.6) !important;
+            background: rgba(224, 242, 254, 0.5) !important;
+        }
+        div[data-testid="stFileUploaderDropzone"] p {
+            color: #475569 !important;
+        }
+        div[data-testid="stFileUploaderDropzone"] button {
+            background: color-mix(in srgb, rgba(56, 189, 248, 0.2) 85%, transparent) !important;
+            color: #0284c7 !important;
+            border: 1px solid rgba(56, 189, 248, 0.45) !important;
+            box-shadow: inset 1px 1px 0.5px rgba(255, 255, 255, 0.8) !important;
+        }
+        div[data-testid="stFileUploaderDropzone"] button:hover {
+            background: rgba(56, 189, 248, 0.3) !important;
+            color: #0369a1 !important;
+        }
+
+        /* ── Metric Inner Box (Light Mode) ── */
+        .glass-metric-inner {
+            background: color-mix(in srgb, rgba(255, 255, 255, 0.65) 85%, transparent) !important;
+            color: #0f172a !important;
+            border: 1px solid rgba(148, 163, 184, 0.28) !important;
+            box-shadow: inset 0 1px 4px rgba(15, 23, 42, 0.04), 0 2px 8px rgba(15, 23, 42, 0.03) !important;
+        }
+        .glass-metric-inner span {
+            color: #334155 !important;
+        }
+
+        /* ── Native Streamlit Input Widgets in Light Mode ── */
+        .stMarkdown, p, span, label, div[data-testid="stWidgetLabel"] label {
+            color: #1e293b;
+        }
+        div[data-testid="stNumberInput"] input {
+            background: rgba(255, 255, 255, 0.95) !important;
+            color: #0f172a !important;
+            border: 1px solid rgba(148, 163, 184, 0.4) !important;
+        }
+        div[data-testid="stSelectbox"] div[data-baseweb="select"] {
+            background: rgba(255, 255, 255, 0.95) !important;
+            color: #0f172a !important;
+            border-color: rgba(148, 163, 184, 0.4) !important;
+        }
+        div[data-testid="stExpander"] {
+            background: color-mix(in srgb, rgba(255, 255, 255, 0.72) 85%, transparent) !important;
+            border: 1px solid rgba(255, 255, 255, 0.9) !important;
+            box-shadow: 0 4px 15px rgba(15, 23, 42, 0.05) !important;
+        }
+        div[data-testid="stTabs"] button[role="tab"] {
+            color: #64748b !important;
+        }
+        div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+            color: #0284c7 !important;
+            border-color: #0284c7 !important;
+        }
+        div[data-testid="stSegmentedControl"] {
+            background: rgba(255, 255, 255, 0.8) !important;
+            border: 1px solid rgba(255, 255, 255, 0.9) !important;
+        }
+        .styled-divider {
+            background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.35), transparent) !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 # ─────────────────────────────────────────────
@@ -1131,54 +1364,60 @@ if st.session_state.get("plans_generated", False):
     st.markdown('<div class="styled-divider"></div>', unsafe_allow_html=True)
     t1 = st.session_state["tcf1_summary"]
     t2 = st.session_state["tcf2_summary"]
+    
+    col_card_bg = "color-mix(in srgb, rgba(255, 255, 255, 0.72) 85%, transparent)" if is_light else "color-mix(in srgb, rgba(15, 23, 42, 0.65) 85%, transparent)"
+    col_card_border = "rgba(255, 255, 255, 0.9)" if is_light else "rgba(255, 255, 255, 0.1)"
+    col_card_shadow = "inset 1px 1px 0.5px rgba(255,255,255,0.9), 0 4px 15px rgba(15,23,42,0.05)" if is_light else "inset 1px 1px 0.5px rgba(255,255,255,0.25)"
+    col_card_text = "#0f172a" if is_light else "#f8fafc"
+    
     st.markdown(
         f"""
         <div class="liquid-glass" style="padding:1.6rem; margin-bottom:1.8rem; border-color:rgba(56,189,248,0.35);">
-            <h4 style="margin:0 0 1.2rem 0; color:#38BDF8; font-size:1.15rem; display:flex; align-items:center; gap:10px;">
+            <h4 style="margin:0 0 1.2rem 0; color:{'#0284c7' if is_light else '#38BDF8'}; font-size:1.15rem; display:flex; align-items:center; gap:10px;">
                 <span class="glass-pill" style="font-size:1.1rem; padding:4px 10px;">🎨</span> Planned Vehicle Count by Source Type (Color-Coded)
             </h4>
             <div style="display:flex; justify-content:space-between; gap:20px; flex-wrap:wrap;">
                 <!-- TCF-1 Column -->
-                <div style="flex:1; min-width:280px; background:color-mix(in srgb, rgba(15,23,42,0.65) 85%, transparent); -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px); border-radius:14px; padding:1.2rem; border:1px solid rgba(255,255,255,0.1); box-shadow:inset 1px 1px 0.5px rgba(255,255,255,0.25);">
-                    <h5 style="margin:0 0 0.8rem 0; color:#90cdf4; font-size:0.95rem; font-weight:700;">TCF-1 (Punch/Altroz)</h5>
+                <div style="flex:1; min-width:280px; background:{col_card_bg}; -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px); border-radius:14px; padding:1.2rem; border:1px solid {col_card_border}; box-shadow:{col_card_shadow};">
+                    <h5 style="margin:0 0 0.8rem 0; color:{'#0284c7' if is_light else '#90cdf4'}; font-size:0.95rem; font-weight:700;">TCF-1 (Punch/Altroz)</h5>
                     <div style="display:flex; flex-direction:column; gap:10px; font-size:0.86rem;">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#E2EFDA; margin-right:8px; border:1px solid rgba(0,0,0,0.15); box-shadow:0 0 6px #E2EFDA;"></span>Paint Floor Float (Light Green):</span>
-                            <strong style="color:#f8fafc;">{t1['colors']['light_green']}</strong>
+                            <strong style="color:{col_card_text};">{t1['colors']['light_green']}</strong>
                         </div>
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#DDEBF7; margin-right:8px; border:1px solid rgba(0,0,0,0.15); box-shadow:0 0 6px #DDEBF7;"></span>WIP in BIW (Light Blue):</span>
-                            <strong style="color:#f8fafc;">{t1['colors']['light_blue']}</strong>
+                            <strong style="color:{col_card_text};">{t1['colors']['light_blue']}</strong>
                         </div>
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#FFF2CC; margin-right:8px; border:1px solid rgba(0,0,0,0.15); box-shadow:0 0 6px #FFF2CC;"></span>BIW Plan Loaded (Production Pending) (Light Yellow):</span>
-                            <strong style="color:#f8fafc;">{t1['colors']['light_yellow']}</strong>
+                            <strong style="color:{col_card_text};">{t1['colors']['light_yellow']}</strong>
                         </div>
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#FCE4D6; margin-right:8px; border:1px solid rgba(0,0,0,0.15); box-shadow:0 0 6px #FCE4D6;"></span>Next 3-Days BIW Plan (Light Pink):</span>
-                            <strong style="color:#f8fafc;">{t1['colors']['light_pink']}</strong>
+                            <strong style="color:{col_card_text};">{t1['colors']['light_pink']}</strong>
                         </div>
                     </div>
                 </div>
                 <!-- TCF-2 Column -->
-                <div style="flex:1; min-width:280px; background:color-mix(in srgb, rgba(15,23,42,0.65) 85%, transparent); -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px); border-radius:14px; padding:1.2rem; border:1px solid rgba(255,255,255,0.1); box-shadow:inset 1px 1px 0.5px rgba(255,255,255,0.25);">
-                    <h5 style="margin:0 0 0.8rem 0; color:#98db9c; font-size:0.95rem; font-weight:700;">TCF-2 (Harrier/Safari)</h5>
+                <div style="flex:1; min-width:280px; background:{col_card_bg}; -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px); border-radius:14px; padding:1.2rem; border:1px solid {col_card_border}; box-shadow:{col_card_shadow};">
+                    <h5 style="margin:0 0 0.8rem 0; color:{'#059669' if is_light else '#98db9c'}; font-size:0.95rem; font-weight:700;">TCF-2 (Harrier/Safari)</h5>
                     <div style="display:flex; flex-direction:column; gap:10px; font-size:0.86rem;">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#E2EFDA; margin-right:8px; border:1px solid rgba(0,0,0,0.15); box-shadow:0 0 6px #E2EFDA;"></span>Paint Floor Float (Light Green):</span>
-                            <strong style="color:#f8fafc;">{t2['colors']['light_green']}</strong>
+                            <strong style="color:{col_card_text};">{t2['colors']['light_green']}</strong>
                         </div>
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#DDEBF7; margin-right:8px; border:1px solid rgba(0,0,0,0.15); box-shadow:0 0 6px #DDEBF7;"></span>WIP in BIW (Light Blue):</span>
-                            <strong style="color:#f8fafc;">{t2['colors']['light_blue']}</strong>
+                            <strong style="color:{col_card_text};">{t2['colors']['light_blue']}</strong>
                         </div>
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#FFF2CC; margin-right:8px; border:1px solid rgba(0,0,0,0.15); box-shadow:0 0 6px #FFF2CC;"></span>BIW Plan Loaded (Production Pending) (Light Yellow):</span>
-                            <strong style="color:#f8fafc;">{t2['colors']['light_yellow']}</strong>
+                            <strong style="color:{col_card_text};">{t2['colors']['light_yellow']}</strong>
                         </div>
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <span><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#FCE4D6; margin-right:8px; border:1px solid rgba(0,0,0,0.15); box-shadow:0 0 6px #FCE4D6;"></span>Next 3-Days BIW Plan (Light Pink):</span>
-                            <strong style="color:#f8fafc;">{t2['colors']['light_pink']}</strong>
+                            <strong style="color:{col_card_text};">{t2['colors']['light_pink']}</strong>
                         </div>
                     </div>
                 </div>
@@ -1191,12 +1430,12 @@ if st.session_state.get("plans_generated", False):
     # Render Planned Models Summary Dashboard
     st.markdown('<div class="styled-divider"></div>', unsafe_allow_html=True)
     st.markdown(
-        """
+        f"""
         <div class="liquid-glass" style="padding:1.4rem; margin-bottom:1.8rem; border-color:rgba(16,185,129,0.35); box-shadow: inset 1.5px 1.5px 1px -0.5px rgba(255, 255, 255, 0.4), 0 16px 40px rgba(0,0,0,0.4), 0 0 25px rgba(16,185,129,0.12);">
-            <h4 style="margin:0 0 0.4rem 0; color:#34D399; font-size:1.15rem; display:flex; align-items:center; gap:10px;">
+            <h4 style="margin:0 0 0.4rem 0; color:{'#059669' if is_light else '#34D399'}; font-size:1.15rem; display:flex; align-items:center; gap:10px;">
                 <span class="glass-pill" style="font-size:1.1rem; padding:4px 10px;">📊</span> Model Plan Summary (NOVA, CNG, Eturna, TGDI)
             </h4>
-            <p style="margin:0; font-size:0.85rem; color:#cbd5e1; line-height:1.4;">
+            <p style="margin:0; font-size:0.85rem; color:{'#475569' if is_light else '#cbd5e1'}; line-height:1.4;">
                 Highlighting the number of constrained model units planned across yesterday's float drops, today, and the next 3 days.
             </p>
         </div>
@@ -1209,6 +1448,11 @@ if st.session_state.get("plans_generated", False):
     tcf2_eturna = st.session_state.get("tcf2_eturna", [120, 120, 120])
     tcf2_tgdi = st.session_state.get("tcf2_tgdi", [40, 40, 40])
 
+    nova_color = "#0284c7" if is_light else "#38bdf8"
+    cng_color = "#ea580c" if is_light else "#fb923c"
+    eturna_color = "#059669" if is_light else "#34d399"
+    tgdi_color = "#7c3aed" if is_light else "#c084fc"
+
     sum_col1, sum_col2, sum_col3, sum_col4 = st.columns(4, gap="large")
     
     with sum_col1:
@@ -1216,20 +1460,20 @@ if st.session_state.get("plans_generated", False):
             f"""
             <div class="liquid-glass" style="border-radius:20px; padding:1.6rem; text-align:center; border-color:rgba(56,189,248,0.35); box-shadow: inset 1.5px 1.5px 1px -0.5px rgba(255,255,255,0.45), inset -1px -1px 1px -0.5px rgba(56,189,248,0.2), 0 16px 40px rgba(0,0,0,0.4), 0 0 24px rgba(56,189,248,0.12);">
                 <div style="font-size:2.5rem; margin-bottom:0.4rem; filter: drop-shadow(0 0 12px rgba(56,189,248,0.5));">⚡</div>
-                <h4 style="color:#38bdf8; margin:0 0 0.2rem 0; font-size:1.25rem; font-weight:700;">NOVA (Punch EV)</h4>
-                <p style="color:#94a3b8; font-size:0.75rem; margin:0 0 1.1rem 0; text-transform:uppercase; letter-spacing:0.06em;">Daily Target Limits</p>
-                <div style="text-align:left; font-size:0.86rem; color:#f1f5f9; background:rgba(0,0,0,0.32); -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:0.9rem; box-shadow:inset 0 2px 6px rgba(0,0,0,0.3);">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:0.4rem;">
-                        <span style="color:#cbd5e1;">B&C Drops Today:</span> <strong style="color:#38bdf8;">{t1['picked']['nova']}</strong>
+                <h4 style="color:{nova_color}; margin:0 0 0.2rem 0; font-size:1.25rem; font-weight:700;">NOVA (Punch EV)</h4>
+                <p style="color:{'#64748b' if is_light else '#94a3b8'}; font-size:0.75rem; margin:0 0 1.1rem 0; text-transform:uppercase; letter-spacing:0.06em;">Daily Target Limits</p>
+                <div class="glass-metric-inner">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem; border-bottom:1px solid rgba(148,163,184,0.2); padding-bottom:0.4rem;">
+                        <span>B&C Drops Today:</span> <strong style="color:{nova_color};">{t1['picked']['nova']}</strong>
                     </div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
-                        <span>Today (Day 1):</span> <span><strong>{t1['day1']['nova']}</strong> <span style="color:#94a3b8;font-size:0.75rem;">/ {tcf1_ev[0]}</span></span>
+                        <span>Today (Day 1):</span> <span><strong>{t1['day1']['nova']}</strong> <span style="font-size:0.75rem;">/ {tcf1_ev[0]}</span></span>
                     </div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
-                        <span>Day 2 Plan:</span> <span><strong>{t1['day2']['nova']}</strong> <span style="color:#94a3b8;font-size:0.75rem;">/ {tcf1_ev[1]}</span></span>
+                        <span>Day 2 Plan:</span> <span><strong>{t1['day2']['nova']}</strong> <span style="font-size:0.75rem;">/ {tcf1_ev[1]}</span></span>
                     </div>
                     <div style="display:flex; justify-content:space-between;">
-                        <span>Day 3 Plan:</span> <span><strong>{t1['day3']['nova']}</strong> <span style="color:#94a3b8;font-size:0.75rem;">/ {tcf1_ev[2]}</span></span>
+                        <span>Day 3 Plan:</span> <span><strong>{t1['day3']['nova']}</strong> <span style="font-size:0.75rem;">/ {tcf1_ev[2]}</span></span>
                     </div>
                 </div>
             </div>
@@ -1242,20 +1486,20 @@ if st.session_state.get("plans_generated", False):
             f"""
             <div class="liquid-glass" style="border-radius:20px; padding:1.6rem; text-align:center; border-color:rgba(251,146,60,0.35); box-shadow: inset 1.5px 1.5px 1px -0.5px rgba(255,255,255,0.45), inset -1px -1px 1px -0.5px rgba(251,146,60,0.2), 0 16px 40px rgba(0,0,0,0.4), 0 0 24px rgba(251,146,60,0.12);">
                 <div style="font-size:2.5rem; margin-bottom:0.4rem; filter: drop-shadow(0 0 12px rgba(251,146,60,0.5));">🔥</div>
-                <h4 style="color:#fb923c; margin:0 0 0.2rem 0; font-size:1.25rem; font-weight:700;">Punch CNG</h4>
-                <p style="color:#94a3b8; font-size:0.75rem; margin:0 0 1.1rem 0; text-transform:uppercase; letter-spacing:0.06em;">Daily Target Limits</p>
-                <div style="text-align:left; font-size:0.86rem; color:#f1f5f9; background:rgba(0,0,0,0.32); -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:0.9rem; box-shadow:inset 0 2px 6px rgba(0,0,0,0.3);">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:0.4rem;">
-                        <span style="color:#cbd5e1;">B&C Drops Today:</span> <strong style="color:#fb923c;">{t1['picked']['cng']}</strong>
+                <h4 style="color:{cng_color}; margin:0 0 0.2rem 0; font-size:1.25rem; font-weight:700;">Punch CNG</h4>
+                <p style="color:{'#64748b' if is_light else '#94a3b8'}; font-size:0.75rem; margin:0 0 1.1rem 0; text-transform:uppercase; letter-spacing:0.06em;">Daily Target Limits</p>
+                <div class="glass-metric-inner">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem; border-bottom:1px solid rgba(148,163,184,0.2); padding-bottom:0.4rem;">
+                        <span>B&C Drops Today:</span> <strong style="color:{cng_color};">{t1['picked']['cng']}</strong>
                     </div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
-                        <span>Today (Day 1):</span> <span><strong>{t1['day1']['cng']}</strong> <span style="color:#94a3b8;font-size:0.75rem;">/ {tcf1_cng[0]}</span></span>
+                        <span>Today (Day 1):</span> <span><strong>{t1['day1']['cng']}</strong> <span style="font-size:0.75rem;">/ {tcf1_cng[0]}</span></span>
                     </div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
-                        <span>Day 2 Plan:</span> <span><strong>{t1['day2']['cng']}</strong> <span style="color:#94a3b8;font-size:0.75rem;">/ {tcf1_cng[1]}</span></span>
+                        <span>Day 2 Plan:</span> <span><strong>{t1['day2']['cng']}</strong> <span style="font-size:0.75rem;">/ {tcf1_cng[1]}</span></span>
                     </div>
                     <div style="display:flex; justify-content:space-between;">
-                        <span>Day 3 Plan:</span> <span><strong>{t1['day3']['cng']}</strong> <span style="color:#94a3b8;font-size:0.75rem;">/ {tcf1_cng[2]}</span></span>
+                        <span>Day 3 Plan:</span> <span><strong>{t1['day3']['cng']}</strong> <span style="font-size:0.75rem;">/ {tcf1_cng[2]}</span></span>
                     </div>
                 </div>
             </div>
@@ -1268,20 +1512,20 @@ if st.session_state.get("plans_generated", False):
             f"""
             <div class="liquid-glass" style="border-radius:20px; padding:1.6rem; text-align:center; border-color:rgba(52,211,153,0.35); box-shadow: inset 1.5px 1.5px 1px -0.5px rgba(255,255,255,0.45), inset -1px -1px 1px -0.5px rgba(52,211,153,0.2), 0 16px 40px rgba(0,0,0,0.4), 0 0 24px rgba(52,211,153,0.12);">
                 <div style="font-size:2.5rem; margin-bottom:0.4rem; filter: drop-shadow(0 0 12px rgba(52,211,153,0.5));">🌱</div>
-                <h4 style="color:#34d399; margin:0 0 0.2rem 0; font-size:1.25rem; font-weight:700;">Eturna (Harrier EV)</h4>
-                <p style="color:#94a3b8; font-size:0.75rem; margin:0 0 1.1rem 0; text-transform:uppercase; letter-spacing:0.06em;">Daily Target Limits</p>
-                <div style="text-align:left; font-size:0.86rem; color:#f1f5f9; background:rgba(0,0,0,0.32); -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:0.9rem; box-shadow:inset 0 2px 6px rgba(0,0,0,0.3);">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:0.4rem;">
-                        <span style="color:#cbd5e1;">B&C Drops Today:</span> <strong style="color:#34d399;">{t2['picked']['eturna']}</strong>
+                <h4 style="color:{eturna_color}; margin:0 0 0.2rem 0; font-size:1.25rem; font-weight:700;">Eturna (Harrier EV)</h4>
+                <p style="color:{'#64748b' if is_light else '#94a3b8'}; font-size:0.75rem; margin:0 0 1.1rem 0; text-transform:uppercase; letter-spacing:0.06em;">Daily Target Limits</p>
+                <div class="glass-metric-inner">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem; border-bottom:1px solid rgba(148,163,184,0.2); padding-bottom:0.4rem;">
+                        <span>B&C Drops Today:</span> <strong style="color:{eturna_color};">{t2['picked']['eturna']}</strong>
                     </div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
-                        <span>Today (Day 1):</span> <span><strong>{t2['day1']['eturna']}</strong> <span style="color:#94a3b8;font-size:0.75rem;">/ {tcf2_eturna[0]}</span></span>
+                        <span>Today (Day 1):</span> <span><strong>{t2['day1']['eturna']}</strong> <span style="font-size:0.75rem;">/ {tcf2_eturna[0]}</span></span>
                     </div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
-                        <span>Day 2 Plan:</span> <span><strong>{t2['day2']['eturna']}</strong> <span style="color:#94a3b8;font-size:0.75rem;">/ {tcf2_eturna[1]}</span></span>
+                        <span>Day 2 Plan:</span> <span><strong>{t2['day2']['eturna']}</strong> <span style="font-size:0.75rem;">/ {tcf2_eturna[1]}</span></span>
                     </div>
                     <div style="display:flex; justify-content:space-between;">
-                        <span>Day 3 Plan:</span> <span><strong>{t2['day3']['eturna']}</strong> <span style="color:#94a3b8;font-size:0.75rem;">/ {tcf2_eturna[2]}</span></span>
+                        <span>Day 3 Plan:</span> <span><strong>{t2['day3']['eturna']}</strong> <span style="font-size:0.75rem;">/ {tcf2_eturna[2]}</span></span>
                     </div>
                 </div>
             </div>
@@ -1294,20 +1538,20 @@ if st.session_state.get("plans_generated", False):
             f"""
             <div class="liquid-glass" style="border-radius:20px; padding:1.6rem; text-align:center; border-color:rgba(192,132,252,0.35); box-shadow: inset 1.5px 1.5px 1px -0.5px rgba(255,255,255,0.45), inset -1px -1px 1px -0.5px rgba(192,132,252,0.2), 0 16px 40px rgba(0,0,0,0.4), 0 0 24px rgba(192,132,252,0.12);">
                 <div style="font-size:2.5rem; margin-bottom:0.4rem; filter: drop-shadow(0 0 12px rgba(192,132,252,0.5));">🏎️</div>
-                <h4 style="color:#c084fc; margin:0 0 0.2rem 0; font-size:1.25rem; font-weight:700;">TGDI (Petrol)</h4>
-                <p style="color:#94a3b8; font-size:0.75rem; margin:0 0 1.1rem 0; text-transform:uppercase; letter-spacing:0.06em;">Daily Target Limits</p>
-                <div style="text-align:left; font-size:0.86rem; color:#f1f5f9; background:rgba(0,0,0,0.32); -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:0.9rem; box-shadow:inset 0 2px 6px rgba(0,0,0,0.3);">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:0.4rem;">
-                        <span style="color:#cbd5e1;">B&C Drops Today:</span> <strong style="color:#c084fc;">{t2['picked']['tgdi']}</strong>
+                <h4 style="color:{tgdi_color}; margin:0 0 0.2rem 0; font-size:1.25rem; font-weight:700;">TGDI (Petrol)</h4>
+                <p style="color:{'#64748b' if is_light else '#94a3b8'}; font-size:0.75rem; margin:0 0 1.1rem 0; text-transform:uppercase; letter-spacing:0.06em;">Daily Target Limits</p>
+                <div class="glass-metric-inner">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem; border-bottom:1px solid rgba(148,163,184,0.2); padding-bottom:0.4rem;">
+                        <span>B&C Drops Today:</span> <strong style="color:{tgdi_color};">{t2['picked']['tgdi']}</strong>
                     </div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
-                        <span>Today (Day 1):</span> <span><strong>{t2['day1']['tgdi']}</strong> <span style="color:#94a3b8;font-size:0.75rem;">/ {tcf2_tgdi[0]}</span></span>
+                        <span>Today (Day 1):</span> <span><strong>{t2['day1']['tgdi']}</strong> <span style="font-size:0.75rem;">/ {tcf2_tgdi[0]}</span></span>
                     </div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
-                        <span>Day 2 Plan:</span> <span><strong>{t2['day2']['tgdi']}</strong> <span style="color:#94a3b8;font-size:0.75rem;">/ {tcf2_tgdi[1]}</span></span>
+                        <span>Day 2 Plan:</span> <span><strong>{t2['day2']['tgdi']}</strong> <span style="font-size:0.75rem;">/ {tcf2_tgdi[1]}</span></span>
                     </div>
                     <div style="display:flex; justify-content:space-between;">
-                        <span>Day 3 Plan:</span> <span><strong>{t2['day3']['tgdi']}</strong> <span style="color:#94a3b8;font-size:0.75rem;">/ {tcf2_tgdi[2]}</span></span>
+                        <span>Day 3 Plan:</span> <span><strong>{t2['day3']['tgdi']}</strong> <span style="font-size:0.75rem;">/ {tcf2_tgdi[2]}</span></span>
                     </div>
                 </div>
             </div>
@@ -1426,6 +1670,21 @@ safari_b64 = get_base64_image("assets/images/tata_safari_3d.png")
 punch_b64 = get_base64_image("assets/images/tata_punch_3d.png")
 
 with st.expander("🚗 TML Fleet Overview (Interactive 3D Cards)", expanded=True):
+    body_color = "#0f172a" if is_light else "#e2e8f0"
+    card_bg = (
+        "radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.15), transparent 60%), rgba(255, 255, 255, 0.78)"
+        if is_light else
+        "radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.12), transparent 60%), rgba(18, 24, 40, 0.65)"
+    )
+    card_border = "rgba(255, 255, 255, 0.95)" if is_light else "rgba(255, 255, 255, 0.14)"
+    card_shadow = (
+        "inset 1.5px 1.5px 1px -0.5px rgba(255, 255, 255, 0.95), inset -1px -1px 1px -0.5px rgba(0, 0, 0, 0.04), 0 16px 40px rgba(15, 23, 42, 0.08)"
+        if is_light else
+        "inset 1.5px 1.5px 1px -0.5px rgba(255, 255, 255, 0.45), inset -1px -1px 1px -0.5px rgba(255, 255, 255, 0.18), inset 0 0 0 0.5px rgba(255, 255, 255, 0.1), 0 16px 40px rgba(0, 0, 0, 0.45), inset 0 8px 12px -8px rgba(255, 255, 255, 0.2), inset 0 -8px 12px -8px rgba(0, 0, 0, 0.35)"
+    )
+    card_title_color = "#0f172a" if is_light else "#ffffff"
+    card_desc_color = "#475569" if is_light else "#cbd5e1"
+
     # Constructing HTML for the 3D cards
     cards_html = f"""
     <script src="https://cdnjs.cloudflare.com/ajax/libs/vanilla-tilt/1.8.1/vanilla-tilt.min.js"></script>
@@ -1435,7 +1694,7 @@ with st.expander("🚗 TML Fleet Overview (Interactive 3D Cards)", expanded=True
             padding: 0;
             background: transparent;
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            color: #e2e8f0;
+            color: {body_color};
             display: flex;
             justify-content: center;
             align-items: center;
@@ -1455,11 +1714,10 @@ with st.expander("🚗 TML Fleet Overview (Interactive 3D Cards)", expanded=True
             position: relative;
             width: 320px;
             height: 380px;
-            background: radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.12), transparent 60%),
-                        rgba(18, 24, 40, 0.65);
+            background: {card_bg};
             -webkit-backdrop-filter: blur(24px) saturate(190%) brightness(1.08);
             backdrop-filter: blur(24px) saturate(190%) brightness(1.08);
-            border: 1px solid rgba(255, 255, 255, 0.14);
+            border: 1px solid {card_border};
             border-radius: 24px;
             overflow: hidden;
             display: flex;
@@ -1468,13 +1726,7 @@ with st.expander("🚗 TML Fleet Overview (Interactive 3D Cards)", expanded=True
             justify-content: flex-end;
             padding: 25px 20px;
             box-sizing: border-box;
-            box-shadow:
-                inset 1.5px 1.5px 1px -0.5px rgba(255, 255, 255, 0.45),
-                inset -1px -1px 1px -0.5px rgba(255, 255, 255, 0.18),
-                inset 0 0 0 0.5px rgba(255, 255, 255, 0.1),
-                0 16px 40px rgba(0, 0, 0, 0.45),
-                inset 0 8px 12px -8px rgba(255, 255, 255, 0.2),
-                inset 0 -8px 12px -8px rgba(0, 0, 0, 0.35);
+            box-shadow: {card_shadow};
             transition: 0.4s cubic-bezier(0.16, 1, 0.3, 1);
             transform-style: preserve-3d;
         }}
@@ -1512,12 +1764,12 @@ with st.expander("🚗 TML Fleet Overview (Interactive 3D Cards)", expanded=True
             font-size: 1.3rem;
             font-weight: 700;
             margin: 0;
-            color: #fff;
+            color: {card_title_color};
             letter-spacing: 0.5px;
         }}
         .card .content-box p {{
             font-size: 0.8rem;
-            color: #cbd5e1;
+            color: {card_desc_color};
             margin: 10px 0 0 0;
             line-height: 1.4;
         }}
